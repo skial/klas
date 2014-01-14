@@ -1,0 +1,14 @@
+{
+  "name": "Klas",
+  "license": "MIT",
+  "classPath": "src",
+  "tags": ["uhu", "uhx", "macro", "klas", "class"],
+  "description": "Helps organize and control multiple build macro's",
+  "contributors": ["skial"],
+  "releasenote": "Initial Release",
+  "version": "0.0.1-alpha",
+  "url": "https://github.com/skial/klas",
+  "dependencies": {
+    
+  }
+}
