@@ -1,37 +1,21 @@
 package uhx.macro;
 
 import haxe.Json;
-import sys.FileSystem;
 import sys.io.File;
+import sys.FileSystem;
 import sys.io.Process;
 import Type in StdType;
-import haxe.macro.Compiler;
 import haxe.macro.Type;
 import haxe.macro.Expr;
 import haxe.ds.StringMap;
 import haxe.macro.Context;
-//import uhu.macro.Du;
-//import uhx.db.macro.DBConfig;
-//import uhx.db.macro.DBConfig;
-//import uhx.macro.Alias;
-//import uhx.macro.Publisher;
-//import uhx.macro.Subscriber;
-//import uhx.macro.Tem.TemMacro;
-//import uhx.macro.To;
-//import uhx.macro.EThis;
-import uhx.macro.NamedArgs;
-/*import uhx.macro.Wait;
-import uhx.macro.Bind;
-import uhx.macro.Forward;
-import uhx.macro.Test;
-import uhx.sys.Ede;*/
+import haxe.macro.Compiler;
 
 using Lambda;
 using StringTools;
 using sys.FileSystem;
 using haxe.macro.TypeTools;
 using haxe.macro.ComplexTypeTools;
-//using uhu.macro.Jumla;
 
 /**
  * ...
@@ -52,7 +36,7 @@ class KlasImpl {
 	}
 	
 	public static function initalize() {
-		DEFAULTS = [/*EThis.handler,*/ /*NamedArgs.handler,*/ /*DBConfig.handler*/];
+		DEFAULTS = [];
 		CLASS_META = new StringMap();
 	}
 	
@@ -72,24 +56,8 @@ class KlasImpl {
 	
 	public static var CLASS_META:StringMap< ClassType->Array<Field>->Array<Field> >;
 	
-	//public static var CLASS_META:StringMap< ClassType->Array<Field>->Array<Field> > = [
-		//':implements' => Implements.handler,	// replaced with uhx.macro.Protocol
-		//':aop' => AOP.handler,	// doesnt work
-		//':tem' => TemMacro.handler,
-		//':cmd' => Ede.handler,
-		//':uhx_to' => To.handler,
-		//':uhx_alias' => Alias.handler,	// causes more trouble than it's worth
-		//':uhx_pub' => Publisher.handler,	// no future
-		//':uhx_sub' => Subscriber.handler,	// no future
-		//':db' => DBConfig.handler,
-	//];
-	
 	public static var CLASS_HAS_FIELD_META:StringMap<String> = [
 		'' => '',
-		//':to' => ':uhx_to',
-		//':pub' => ':uhx_pub',
-		//':sub' => ':uhx_sub',
-		//':alias' => ':uhx_alias',
 	];
 	
 	private static var reTypes:Array<ClassType->Array<Field>->TypeDefinition> = [];
@@ -107,10 +75,6 @@ class KlasImpl {
 		
 		reTypes = [];
 		
-		#if debug_macros
-		trace( cls.path() );
-		#end
-		
 		/**
 		 * Loop through any class metadata and pass along 
 		 * the class and its fields to the matching handler.
@@ -123,9 +87,6 @@ class KlasImpl {
 			
 			if (cls.meta.has( key )) {
 				
-				#if debug_macros
-				trace( key );
-				#end
 				fields = CLASS_META.get( key )( cls, fields );
 				
 			}
@@ -149,9 +110,6 @@ class KlasImpl {
 			
 			if (matched != null) {
 				
-				#if debug_macros
-				trace( matched );
-				#end
 				fields = CLASS_META.get( matched )(cls, fields);
 				
 			}
@@ -159,14 +117,6 @@ class KlasImpl {
 		}
 		
 		for (def in DEFAULTS) {
-			#if debug_macros
-			trace( switch (Lambda.indexOf(DEFAULTS, def)) {
-				case 0: 'Wait';
-				case 1: 'NamedArgs';
-				case 2: 'EThis';
-				case _: 'Not Implemented';
-			} );
-			#end
 			fields = def( cls, fields );
 		}
 		
