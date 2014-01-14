@@ -10,15 +10,15 @@ import haxe.macro.Type;
 import haxe.macro.Expr;
 import haxe.ds.StringMap;
 import haxe.macro.Context;
-import uhu.macro.Du;
-import uhx.db.macro.DBConfig;
+//import uhu.macro.Du;
+//import uhx.db.macro.DBConfig;
 //import uhx.db.macro.DBConfig;
 //import uhx.macro.Alias;
 //import uhx.macro.Publisher;
 //import uhx.macro.Subscriber;
 //import uhx.macro.Tem.TemMacro;
 //import uhx.macro.To;
-import uhx.macro.EThis;
+//import uhx.macro.EThis;
 import uhx.macro.NamedArgs;
 /*import uhx.macro.Wait;
 import uhx.macro.Bind;
@@ -29,14 +29,16 @@ import uhx.sys.Ede;*/
 using Lambda;
 using StringTools;
 using sys.FileSystem;
-using uhu.macro.Jumla;
+using haxe.macro.TypeTools;
+using haxe.macro.ComplexTypeTools;
+//using uhu.macro.Jumla;
 
 /**
  * ...
  * @author Skial Bainn
  */
 
-class Handler {
+class KlasImpl {
 	
 	@:isVar public static var setup(get, null):Bool;
 	
@@ -50,7 +52,7 @@ class Handler {
 	}
 	
 	public static function initalize() {
-		DEFAULTS = [/*EThis.handler,*/ NamedArgs.handler, /*DBConfig.handler*/];
+		DEFAULTS = [/*EThis.handler,*/ /*NamedArgs.handler,*/ /*DBConfig.handler*/];
 		CLASS_META = new StringMap();
 	}
 	
@@ -136,7 +138,7 @@ class Handler {
 			
 			for (f in fields) {
 				
-				if (f.meta.exists( key ) && CLASS_META.exists( CLASS_HAS_FIELD_META.get( key ) )) {
+				if (f.meta.exists( function(m) return m.name == key ) && CLASS_META.exists( CLASS_HAS_FIELD_META.get( key ) )) {
 					
 					matched = CLASS_HAS_FIELD_META.get( key );
 					break;
@@ -178,12 +180,12 @@ class Handler {
 			
 			switch( td.kind ) {
 				case TDClass(c, _, _):
-					
+					trace( TPath( c ).toString() );
 					try {
-						Context.getType( c.path() );
+						Context.getType( TPath( c ).toString() );
 					} catch (e:Dynamic) {
-						POSTPONED.set( c.path(), td );
-						LINEAGE.set( c.path(), td.path() );
+						POSTPONED.set( TPath( c ).toString(), td );
+						LINEAGE.set( TPath( c ).toString(), td.pack.join('.') + td.name );
 						continue;
 					}
 					
@@ -225,14 +227,14 @@ class Handler {
 						
 				}
 			}*/
-			buildLineage( td.path() );
+			buildLineage( td.pack.join('.') + td.name );
 			
 			/*switch (td.kind) {
 				case TDClass(s, i, b): i.remove( { name: 'Klas', pack: [], params: [] } );
 				case _:
 			}*/
-			trace( td.printTypeDefinition() );
-			Compiler.exclude( cls.path() );
+			//trace( td.printTypeDefinition() );
+			Compiler.exclude( cls.pack.join('.') + cls.name );
 			Context.defineType( td );
 			//Context.getType( td.path() );
 		}
@@ -250,9 +252,9 @@ class Handler {
 		if (LINEAGE.exists( path ) && POSTPONED.exists( path )) {
 			
 			var td = POSTPONED.get( path );
-			buildLineage( td.path() );
+			buildLineage( td.pack.join('.') + td.name );
 			
-			trace( td.printTypeDefinition() );
+			trace( td );
 			//Compiler.exclude( path );
 			Context.defineType( td );
 			
