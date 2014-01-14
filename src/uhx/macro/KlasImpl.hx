@@ -1,6 +1,7 @@
 package uhx.macro;
 
 import haxe.Json;
+import hxparse.RuleBuilder;
 import sys.io.File;
 import sys.FileSystem;
 import sys.io.Process;
@@ -36,11 +37,11 @@ class KlasImpl {
 	}
 	
 	public static function initalize() {
-		DEFAULTS = [];
+		DEFAULTS = new StringMap();
 		CLASS_META = new StringMap();
 	}
 	
-	public static var DEFAULTS:Array < ClassType->Array<Field>->Array<Field> > = [];
+	public static var DEFAULTS:StringMap<ClassType->Array<Field>->Array<Field>> = new StringMap();
 	
 	private static function dirLoop(dir:String, ?pack:String = ''):Array<String> {
 		var results = [];
