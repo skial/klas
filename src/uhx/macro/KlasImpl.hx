@@ -17,6 +17,7 @@ using StringTools;
 using sys.FileSystem;
 using haxe.macro.TypeTools;
 using haxe.macro.ComplexTypeTools;
+using haxe.macro.MacroStringTools;
 
 /**
  * ...
@@ -37,13 +38,14 @@ class KlasImpl {
 	}
 	
 	public static function initalize() {
+		history = new StringMap();
 		DEFAULTS = new StringMap();
 		CLASS_META = new StringMap();
 	}
 	
 	public static var DEFAULTS:StringMap<ClassType->Array<Field>->Array<Field>> = new StringMap();
 	
-	private static function dirLoop(dir:String, ?pack:String = ''):Array<String> {
+	/*private static function dirLoop(dir:String, ?pack:String = ''):Array<String> {
 		var results = [];
 		
 		for (d in FileSystem.readDirectory( dir )) if (FileSystem.isDirectory( dir + '/' + d )) {
@@ -53,7 +55,7 @@ class KlasImpl {
 		}
 		
 		return results;
-	}
+	}*/
 	
 	public static var CLASS_META:StringMap< ClassType->Array<Field>->Array<Field> >;
 	
@@ -67,9 +69,16 @@ class KlasImpl {
 		reTypes.push( callback );
 	}
 	
+	public static var history:StringMap<Array<String>>;
+	
 	public static function build():Array<Field> {
 		var cls = Context.getLocalClass().get();
 		var fields = Context.getBuildFields();
+		
+		// Populate history
+		if (!history.exists( cls.pack.toDotPath( cls.name ) )) {
+			history.set( cls.pack.toDotPath( cls.name ), [for (field in fields) field.name] );
+		}
 		
 		if (!setup) initalize();
 		if (cls.meta.has(':KLAS_SKIP')) return fields;
@@ -136,7 +145,7 @@ class KlasImpl {
 						Context.getType( TPath( c ).toString() );
 					} catch (e:Dynamic) {
 						POSTPONED.set( TPath( c ).toString(), td );
-						LINEAGE.set( TPath( c ).toString(), td.pack.join('.') + td.name );
+						LINEAGE.set( TPath( c ).toString(), td.pack.toDotPath( td.name ) );
 						continue;
 					}
 					
@@ -178,14 +187,14 @@ class KlasImpl {
 						
 				}
 			}*/
-			buildLineage( td.pack.join('.') + td.name );
+			buildLineage( td.pack.toDotPath( td.name ) );
 			
 			/*switch (td.kind) {
 				case TDClass(s, i, b): i.remove( { name: 'Klas', pack: [], params: [] } );
 				case _:
 			}*/
 			//trace( td.printTypeDefinition() );
-			Compiler.exclude( cls.pack.join('.') + cls.name );
+			Compiler.exclude( cls.pack.toDotPath( cls.name ) );
 			Context.defineType( td );
 			//Context.getType( td.path() );
 		}
@@ -203,7 +212,7 @@ class KlasImpl {
 		if (LINEAGE.exists( path ) && POSTPONED.exists( path )) {
 			
 			var td = POSTPONED.get( path );
-			buildLineage( td.pack.join('.') + td.name );
+			buildLineage( td.pack.toDotPath( td.name ) );
 			
 			trace( td );
 			//Compiler.exclude( path );
