@@ -9,6 +9,6 @@ package ;
  * Haitian Creole for... wait for it... class
  */
 #if !macro
-@:autoBuild( uhx.macro.KlasImpl.build() ) 
+@:autoBuild( uhx.macro.KlasImp.build() ) 
 #end
 interface Klas { }

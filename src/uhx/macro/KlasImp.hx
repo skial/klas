@@ -1,6 +1,7 @@
 package uhx.macro;
 
 import haxe.Json;
+import haxe.macro.Printer;
 import hxparse.RuleBuilder;
 import sys.io.File;
 import sys.FileSystem;
@@ -24,7 +25,7 @@ using haxe.macro.MacroStringTools;
  * @author Skial Bainn
  */
 
-class KlasImpl {
+class KlasImp {
 	
 	@:isVar public static var setup(get, null):Bool;
 	
@@ -41,27 +42,14 @@ class KlasImpl {
 		history = new StringMap();
 		DEFAULTS = new StringMap();
 		CLASS_META = new StringMap();
+		FIELD_META = new StringMap();
+		INLINE_META = new Map();
 	}
 	
-	public static var DEFAULTS:StringMap<ClassType->Array<Field>->Array<Field>> = new StringMap();
-	
-	/*private static function dirLoop(dir:String, ?pack:String = ''):Array<String> {
-		var results = [];
-		
-		for (d in FileSystem.readDirectory( dir )) if (FileSystem.isDirectory( dir + '/' + d )) {
-			results = results.concat( dirLoop( dir + '/' + d, pack == '' ? d : pack + '.' + d ) );
-		} else if (d.endsWith('.hx')) {
-			results.push( (pack == '' ? '' : pack + '.') + d.replace('.hx', '') );
-		}
-		
-		return results;
-	}*/
-	
-	public static var CLASS_META:StringMap< ClassType->Array<Field>->Array<Field> >;
-	
-	public static var CLASS_HAS_FIELD_META:StringMap<String> = [
-		'' => '',
-	];
+	public static var DEFAULTS:StringMap<ClassType->Array<Field>->Array<Field>>;
+	public static var CLASS_META:StringMap<ClassType->Array<Field>->Array<Field>>;
+	public static var FIELD_META:StringMap<ClassType->Field->Field>;	
+	public static var INLINE_META:Map<EReg, ClassType->Field->Field>;
 	
 	private static var reTypes:Array<ClassType->Array<Field>->TypeDefinition> = [];
 	
@@ -69,6 +57,7 @@ class KlasImpl {
 		reTypes.push( callback );
 	}
 	
+	public static var printer:Printer = new Printer();
 	public static var history:StringMap<Array<String>>;
 	
 	public static function build():Array<Field> {
@@ -93,36 +82,27 @@ class KlasImpl {
 		 * while in IDE display mode, `-D display`.
 		 */
 		
-		for (key in CLASS_META.keys()) {
-			
-			if (cls.meta.has( key )) {
-				
-				fields = CLASS_META.get( key )( cls, fields );
-				
-			}
-			
+		for (key in CLASS_META.keys()) if (cls.meta.has( key )) {
+			fields = CLASS_META.get( key )( cls, fields );
 		}
 		
-		for (key in CLASS_HAS_FIELD_META.keys()) {
+		for (i in 0...fields.length) {
 			
-			var matched = null;
+			var field = fields[i];
 			
-			for (f in fields) {
-				
-				if (f.meta.exists( function(m) return m.name == key ) && CLASS_META.exists( CLASS_HAS_FIELD_META.get( key ) )) {
-					
-					matched = CLASS_HAS_FIELD_META.get( key );
-					break;
-					
-				}
-				
+			// First check the field's metadata for matches.
+			for (key in FIELD_META.keys()) if (field.meta.exists( function(m) return m.name == key )) {
+				field = FIELD_META.get( key )( cls, field );
 			}
 			
-			if (matched != null) {
-				
-				fields = CLASS_META.get( matched )(cls, fields);
-				
+			var printed = printer.printField( field );
+			
+			// Now check the stringified field for matching inline metadata.
+			for (key in INLINE_META.keys()) if (key.match( printed )) {
+				field = INLINE_META.get( key )( cls, field );
 			}
+			
+			fields[i] = field;
 			
 		}
 		
