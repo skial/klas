@@ -2,7 +2,6 @@ package uhx.macro;
 
 import haxe.Json;
 import haxe.macro.Printer;
-import hxparse.RuleBuilder;
 import sys.io.File;
 import sys.FileSystem;
 import sys.io.Process;
@@ -27,29 +26,26 @@ using haxe.macro.MacroStringTools;
 
 class KlasImp {
 	
-	@:isVar public static var setup(get, null):Bool;
-	
-	private static function get_setup():Bool {
-		if (setup == null) {
-			setup = true;
-			return false;
-		}
-		
-		return true;
-	}
+	public static var isSetup:Bool = false;
 	
 	public static function initalize() {
-		history = new StringMap();
-		DEFAULTS = new StringMap();
-		CLASS_META = new StringMap();
-		FIELD_META = new StringMap();
-		INLINE_META = new Map();
+		if (isSetup == null || isSetup == false) {
+			history = new StringMap();
+			DEFAULTS = new StringMap();
+			CLASS_META = new StringMap();
+			FIELD_META = new StringMap();
+			INLINE_META = new Map();
+			ONCE = [];
+			
+			isSetup = true;
+		}
 	}
 	
 	public static var DEFAULTS:StringMap<ClassType->Array<Field>->Array<Field>>;
 	public static var CLASS_META:StringMap<ClassType->Array<Field>->Array<Field>>;
 	public static var FIELD_META:StringMap<ClassType->Field->Field>;	
-	public static var INLINE_META:Map<EReg, ClassType->Field->Field>;
+	public static var INLINE_META:Map < EReg, ClassType-> Field->Field > ;
+	public static var ONCE:Array<Void->Void>;
 	
 	private static var reTypes:Array<ClassType->Array<Field>->TypeDefinition> = [];
 	
@@ -65,12 +61,16 @@ class KlasImp {
 		var fields = Context.getBuildFields();
 		
 		// Populate history
-		if (!history.exists( cls.pack.toDotPath( cls.name ) )) {
+		/*if (!history.exists( cls.pack.toDotPath( cls.name ) )) {
 			history.set( cls.pack.toDotPath( cls.name ), [for (field in fields) field.name] );
-		}
+		}*/
 		
-		if (!setup) initalize();
+		initalize();
 		if (cls.meta.has(':KLAS_SKIP')) return fields;
+		
+		// Call all callbacks.
+		for (once in ONCE) once();
+		ONCE = [];
 		
 		reTypes = [];
 		
@@ -90,7 +90,8 @@ class KlasImp {
 			
 			var field = fields[i];
 			
-			// First check the field's metadata for matches.
+			// First check the field's metadata for matches. 
+			// Passing along the class and matched field.
 			for (key in FIELD_META.keys()) if (field.meta.exists( function(m) return m.name == key )) {
 				field = FIELD_META.get( key )( cls, field );
 			}
@@ -98,6 +99,7 @@ class KlasImp {
 			var printed = printer.printField( field );
 			
 			// Now check the stringified field for matching inline metadata.
+			// Passing along the class and matched field.
 			for (key in INLINE_META.keys()) if (key.match( printed )) {
 				field = INLINE_META.get( key )( cls, field );
 			}
@@ -110,6 +112,8 @@ class KlasImp {
 			fields = def( cls, fields );
 		}
 		
+		// This is a horrible idea - I want to get rid of it. Still fun tho.
+		// -----
 		// Really sad that I have to destroy and rebuild a class just to get what I want...
 		// All callbacks handle the rename hack. @:native('orginal.package.and.Name')
 		// All retyped classes should not modify the fields further.
