@@ -22,6 +22,7 @@ file.
 To add your build macro to Klas you need to do two thing.s
 
 1.	Add the following `initialize` method to your build macro.
+
 	```
 	private static function initialize() {
 		try {
@@ -33,6 +34,7 @@ To add your build macro to Klas you need to do two thing.s
 		}
 	}
 	```
+	
 2.	You should also provide a normal entry point for people not using Klas, who will
 	be using `@:autoBuild` or `@:build` metadata.
 3. 	If your build macro doesnt already have an `extraParams.hxml` file, create one
