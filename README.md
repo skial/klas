@@ -23,7 +23,7 @@ To add your build macro to Klas you need to do two thing.s
 
 1.	Add the following `initialize` method to your build macro.
 
-	```
+	```Haxe
 	private static function initialize() {
 		try {
 			KlasImp.initalize();
@@ -64,7 +64,7 @@ You would place the hook after the line `KlasImp.initalize();` in your `initiali
 
 The following `initialize`, `build` and `handler` methods are taken from [Wait.hx].
 
-```
+```Haxe
 	private static function initialize() {
 		try {
 			KlasImp.initalize();
