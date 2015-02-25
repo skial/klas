@@ -92,12 +92,12 @@ class KlasImp {
 			
 			// First check the field's metadata for matches. 
 			// Passing along the class and matched field.
-			for (key in FIELD_META.keys()) if (field.meta.exists( function(m) return m.name == key )) {
+			for (key in FIELD_META.keys()) if (field.meta != null && field.meta.exists( function(m) return m.name == key )) {
 				field = FIELD_META.get( key )( cls, field );
 			}
 			
 			var printed = printer.printField( field );
-			
+			//trace( printed );
 			// Now check the stringified field for matching inline metadata.
 			// Passing along the class and matched field.
 			for (key in INLINE_META.keys()) if (key.match( printed )) {
