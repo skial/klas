@@ -61,19 +61,13 @@ class KlasImp {
 	 * A list of metadata paired with a handler method returning a 
 	 * rebuilt class.
 	 */
-	public static var RETYPE:StringMap<ClassType->Array<Field>->TypeDefinition>;
+	public static var RETYPE:StringMap<ClassType->Array<Field>->Null<TypeDefinition>>;
 	
 	/**
 	 * Holds a class path paired with its ClassType and Fields from the previous time
 	 * it was encountered.
 	 */
 	public static var RETYPE_PREVIOUS:StringMap<{ cls:ClassType, fields:Array<Field> }>;
-	
-	private static var reTypes:Array<ClassType->Array<Field>->TypeDefinition> = [];
-	
-	public static function registerForReType(callback:ClassType->Array<Field>->TypeDefinition):Void {
-		reTypes.push( callback );
-	}
 	
 	public static var printer:Printer = new Printer();
 	public static var history:StringMap<Array<String>>;
@@ -167,6 +161,8 @@ class KlasImp {
 			if (cls != null && fields != null) {
 				// Pass `cls` and `fields` to the retype handler to get a `typedefinition` back.
 				var td = RETYPE.get( metadata )( cls, fields );
+				
+				if (td == null) return false;
 				
 				var nativeF = metadataFilter.bind(_, ':native');
 				
