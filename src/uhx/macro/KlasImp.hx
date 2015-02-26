@@ -37,6 +37,10 @@ class KlasImp {
 			INLINE_META = new Map();
 			ONCE = [];
 			
+			RETYPE = new StringMap();
+			RETYPE_PENDING = new StringMap();
+			RETYPE_PREVIOUS = new StringMap();
+			
 			isSetup = true;
 		}
 	}
@@ -44,8 +48,26 @@ class KlasImp {
 	public static var DEFAULTS:StringMap<ClassType->Array<Field>->Array<Field>>;
 	public static var CLASS_META:StringMap<ClassType->Array<Field>->Array<Field>>;
 	public static var FIELD_META:StringMap<ClassType->Field->Field>;	
-	public static var INLINE_META:Map < EReg, ClassType-> Field->Field > ;
+	public static var INLINE_META:Map<EReg, ClassType->Field->Field>;
 	public static var ONCE:Array<Void->Void>;
+	
+	/**
+	 * Simply holds a class path with a boolean value. If true, run the
+	 * handler in `RETYPE` if it has a matching metadata.
+	 */
+	public static var RETYPE_PENDING:StringMap<Bool>;
+	
+	/**
+	 * A list of metadata paired with a handler method returning a 
+	 * rebuilt class.
+	 */
+	public static var RETYPE:StringMap<ClassType->Array<Field>->TypeDefinition>;
+	
+	/**
+	 * Holds a class path paired with its ClassType and Fields from the previous time
+	 * it was encountered.
+	 */
+	public static var RETYPE_PREVIOUS:StringMap<{ cls:ClassType, fields:Array<Field> }>;
 	
 	private static var reTypes:Array<ClassType->Array<Field>->TypeDefinition> = [];
 	
@@ -117,7 +139,7 @@ class KlasImp {
 		// Really sad that I have to destroy and rebuild a class just to get what I want...
 		// All callbacks handle the rename hack. @:native('orginal.package.and.Name')
 		// All retyped classes should not modify the fields further.
-		for (callback in reTypes) {
+		/*for (callback in reTypes) {
 			var td = callback( cls, fields );
 			
 			if (td == null) continue;
@@ -171,22 +193,22 @@ class KlasImp {
 						
 				}
 			}*/
-			buildLineage( td.pack.toDotPath( td.name ) );
+			//buildLineage( td.pack.toDotPath( td.name ) );
 			
 			/*switch (td.kind) {
 				case TDClass(s, i, b): i.remove( { name: 'Klas', pack: [], params: [] } );
 				case _:
 			}*/
 			//trace( td.printTypeDefinition() );
-			Compiler.exclude( cls.pack.toDotPath( cls.name ) );
-			Context.defineType( td );
+			/*Compiler.exclude( cls.pack.toDotPath( cls.name ) );
+			Context.defineType( td );*/
 			//Context.getType( td.path() );
-		}
+		//}
 		
 		return fields;
 	}
 	
-	private static var POSTPONED:StringMap<TypeDefinition> = new StringMap<TypeDefinition>();
+	/*private static var POSTPONED:StringMap<TypeDefinition> = new StringMap<TypeDefinition>();
 	private static var LINEAGE:StringMap<String> = new StringMap<String>();
 	
 	private static function buildLineage(path:String) {
@@ -203,6 +225,55 @@ class KlasImp {
 			Context.defineType( td );
 			
 		}
+	}*/
+	
+	public static function retype(key:String, ?cls:ClassType, ?fields:Array<Field>):Bool {
+		var result = false;
+		
+		if (RETYPE.exists( key )) {
+			// Fetch the previous class and fields.
+			var prev = RETYPE_PREVIOUS.exists( key ) ? RETYPE_PREVIOUS.get( key ) : null;
+			
+			// Set `cls` and `fields` only if the cache exists.
+			if (cls == null && prev != null) cls = prev.cls;
+			if (fields == null && prev != null) fields = prev.fields;
+			
+			if (cls != null && fields != null) {
+				// Pass `cls` and `fields` to the retype handler to get a `typedefinition` back.
+				var td = RETYPE.get( key )( cls, fields );
+				
+				var nativeF = metadataFilter.bind(_, ':native');
+				
+				// Check if `@:native('path.to.Class')` exists. Add if it doesnt exist.
+				if (!td.meta != null && td.meta.exists( nativeF ) {
+					for (m in td.meta.filter( nativeF )) td.meta.remove( m );
+					td.meta.push( { name:':native', params:[macro $v { cls.pack.toDotPath( cls.name ) } ], pos:cls.pos } );
+					
+				}
+				
+				// Remove the previous class for the the current compile.
+				Compiler.exclude( cls.pack.toDotPath( cls.name ) );
+				
+				// Add the "retyped" class into the current compile.
+				Context.defineType( td );
+				
+				// Cache the "retyped" fields in case of another "retype"
+				prev.fields = td.fields;
+				prev.cls = Context.getType( td.pack.toDotPath( td.name ) );
+				
+				RETYPE_PREVIOUS.set( key, prev );
+				
+				result = true;
+				
+			}
+			
+		}
+		
+		return result;
+	}
+	
+	private static function metadataFilter(meta:Metadata, tag:String):Metadata {
+		return meta.name == tag && printer.printExprs( meta.params, '.' ).indexOf( cls.pack.toDotPath( cls.name ) ) > -1;
 	}
 	
 }
