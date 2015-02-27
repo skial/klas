@@ -169,9 +169,15 @@ class KlasImp {
 				if (td.meta != null && td.meta.exists( nativeF )) for (m in td.meta.filter( nativeF )) td.meta.remove( m );
 				td.meta.push( { name:':native', params:[macro $v { cls.pack.toDotPath( cls.name ) } ], pos:cls.pos } );
 				
+				// If the TypeDefinition::name is the same as `cls.name`, modify it.
+				if (td.pack.toDotPath( td.name ) == cls.pack.toDotPath( cls.name ) || td.pack.toDotPath( td.name ) == prev.name) {
+					td.name += ('' + Date.now().getTime()).replace('+', '_').replace('.', '_');
+					
+				}
+				
 				// Remove the previous class for the the current compile.
 				Compiler.exclude( prev.name );
-				
+				trace( new Printer().printTypeDefinition( td, true ) );
 				// Add the "retyped" class into the current compile.
 				Context.defineType( td );
 				
