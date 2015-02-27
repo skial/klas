@@ -67,7 +67,7 @@ class KlasImp {
 	 * Holds a class path paired with its ClassType and Fields from the previous time
 	 * it was encountered.
 	 */
-	public static var RETYPE_PREVIOUS:StringMap<{ cls:ClassType, fields:Array<Field> }>;
+	public static var RETYPE_PREVIOUS:StringMap<{ name:String, cls:ClassType, fields:Array<Field> }>;
 	
 	public static var printer:Printer = new Printer();
 	public static var history:StringMap<Array<String>>;
@@ -87,8 +87,6 @@ class KlasImp {
 		// Call all callbacks.
 		for (once in ONCE) once();
 		ONCE = [];
-		
-		reTypes = [];
 		
 		/**
 		 * Loop through any class metadata and pass along 
@@ -131,7 +129,7 @@ class KlasImp {
 		for (key in RETYPE.keys()) if (cls.meta.has( key )) {
 			// Build the cache.
 			if (!RETYPE_PREVIOUS.exists( cls.pack.toDotPath( cls.name ) )) {
-				RETYPE_PREVIOUS.set( cls.pack.toDotPath( cls.name ), { cls:cls, fields:fields } );
+				RETYPE_PREVIOUS.set( cls.pack.toDotPath( cls.name ), { cls:cls, name:cls.pack.toDotPath( cls.name ), fields:fields } );
 				
 			}
 			
@@ -150,13 +148,14 @@ class KlasImp {
 	public static function retype(path:String, metadata:String, ?cls:ClassType, ?fields:Array<Field>):Bool {
 		var result = false;
 		
-		if (RETYPE_PREVIOUS.exists( path )) {
+		if (RETYPE.exists( metadata ) && RETYPE_PREVIOUS.exists( path )) {
 			// Fetch the previous class and fields.
 			var prev = RETYPE_PREVIOUS.get( path );
 			
 			// Set `cls` and `fields` only if the cache exists.
 			if (cls == null && prev != null) cls = prev.cls;
 			if (fields == null && prev != null) fields = prev.fields;
+			if (prev.name == null || prev.name == '') prev.name = cls.pack.toDotPath( cls.name );
 			
 			if (cls != null && fields != null) {
 				// Pass `cls` and `fields` to the retype handler to get a `typedefinition` back.
@@ -164,24 +163,22 @@ class KlasImp {
 				
 				if (td == null) return false;
 				
-				var nativeF = metadataFilter.bind(_, ':native');
+				var nativeF = metadataFilter.bind(_, ':native', cls.pack.toDotPath( cls.name ));
 				
 				// Check if `@:native('path.to.Class')` exists. Add if it doesnt exist.
-				if (!td.meta != null && td.meta.exists( nativeF ) {
-					for (m in td.meta.filter( nativeF )) td.meta.remove( m );
-					td.meta.push( { name:':native', params:[macro $v { cls.pack.toDotPath( cls.name ) } ], pos:cls.pos } );
-					
-				}
+				if (td.meta != null && td.meta.exists( nativeF )) for (m in td.meta.filter( nativeF )) td.meta.remove( m );
+				td.meta.push( { name:':native', params:[macro $v { cls.pack.toDotPath( cls.name ) } ], pos:cls.pos } );
 				
 				// Remove the previous class for the the current compile.
-				Compiler.exclude( cls.pack.toDotPath( cls.name ) );
+				Compiler.exclude( prev.name );
 				
 				// Add the "retyped" class into the current compile.
 				Context.defineType( td );
 				
 				// Cache the "retyped" fields in case of another "retype"
 				prev.fields = td.fields;
-				prev.cls = Context.getType( td.pack.toDotPath( td.name ) );
+				prev.name = td.pack.toDotPath( td.name );
+				//prev.cls = Context.getType( td.pack.toDotPath( td.name ) );
 				
 				RETYPE_PREVIOUS.set( path, prev );
 				
@@ -191,15 +188,15 @@ class KlasImp {
 			
 		} else {
 			RETYPE_PENDING.set( path, true );
-			if (cls != null && fields != null) RETYPE_PREVIOUS.set( path, { cls:cls, fields:fields } );
+			if (cls != null && fields != null) RETYPE_PREVIOUS.set( path, { cls:cls, name:cls.pack.toDotPath( cls.name ), fields:fields } );
 			
 		}
 		
 		return result;
 	}
 	
-	private static function metadataFilter(meta:Metadata, tag:String):Metadata {
-		return meta.name == tag && printer.printExprs( meta.params, '.' ).indexOf( cls.pack.toDotPath( cls.name ) ) > -1;
+	private static function metadataFilter(meta:MetadataEntry, tag:String, pack:String):Bool {
+		return meta.name == tag && printer.printExprs( meta.params, '.' ).indexOf( pack ) > -1;
 	}
 	
 }
