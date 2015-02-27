@@ -59,6 +59,10 @@ Klas provides the following hooks/variables you can register with.
 5.	The `INLINE_META` ereg map allows you to register your interest in methods that contain an
 	inline meta tag, eg `var a = @:metadata 100;` Your handler should be of the type
 	`ClassType->Field->Field`.
+6.	The `RETYPE` string map allows you to register a handler which will return a rebuilt type
+	with matching metadata. You handler should be of the type `ClassType->Array<Field>->Null<TypeDefinition>`.
+	To trigger a retype, you have to call `uhx.macro.KlasImp.retype('your.Class', ':metadata')`. This should
+	only be called in the macro context.
 	
 You would place the hook after the line `KlasImp.initalize();` in your `initialize` method.
 
