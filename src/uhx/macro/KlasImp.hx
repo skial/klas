@@ -37,6 +37,10 @@ class KlasImp {
 			INLINE_META = new Map();
 			ONCE = [];
 			
+			RETYPE = new StringMap();
+			RETYPE_PENDING = new StringMap();
+			RETYPE_PREVIOUS = new StringMap();
+			
 			isSetup = true;
 		}
 	}
@@ -44,14 +48,26 @@ class KlasImp {
 	public static var DEFAULTS:StringMap<ClassType->Array<Field>->Array<Field>>;
 	public static var CLASS_META:StringMap<ClassType->Array<Field>->Array<Field>>;
 	public static var FIELD_META:StringMap<ClassType->Field->Field>;	
-	public static var INLINE_META:Map < EReg, ClassType-> Field->Field > ;
+	public static var INLINE_META:Map<EReg, ClassType->Field->Field>;
 	public static var ONCE:Array<Void->Void>;
 	
-	private static var reTypes:Array<ClassType->Array<Field>->TypeDefinition> = [];
+	/**
+	 * Simply holds a class path with a boolean value. If true, run the
+	 * handler in `RETYPE` if it has a matching metadata.
+	 */
+	public static var RETYPE_PENDING:StringMap<Bool>;
 	
-	public static function registerForReType(callback:ClassType->Array<Field>->TypeDefinition):Void {
-		reTypes.push( callback );
-	}
+	/**
+	 * A list of metadata paired with a handler method returning a 
+	 * rebuilt class.
+	 */
+	public static var RETYPE:StringMap<ClassType->Array<Field>->Null<TypeDefinition>>;
+	
+	/**
+	 * Holds a class path paired with its ClassType and Fields from the previous time
+	 * it was encountered.
+	 */
+	public static var RETYPE_PREVIOUS:StringMap<{ name:String, cls:ClassType, fields:Array<Field> }>;
 	
 	public static var printer:Printer = new Printer();
 	public static var history:StringMap<Array<String>>;
@@ -71,8 +87,6 @@ class KlasImp {
 		// Call all callbacks.
 		for (once in ONCE) once();
 		ONCE = [];
-		
-		reTypes = [];
 		
 		/**
 		 * Loop through any class metadata and pass along 
@@ -112,97 +126,77 @@ class KlasImp {
 			fields = def( cls, fields );
 		}
 		
-		// This is a horrible idea - I want to get rid of it. Still fun tho.
-		// -----
-		// Really sad that I have to destroy and rebuild a class just to get what I want...
-		// All callbacks handle the rename hack. @:native('orginal.package.and.Name')
-		// All retyped classes should not modify the fields further.
-		for (callback in reTypes) {
-			var td = callback( cls, fields );
-			
-			if (td == null) continue;
-			
-			switch( td.kind ) {
-				case TDClass(c, _, _):
-					trace( TPath( c ).toString() );
-					try {
-						Context.getType( TPath( c ).toString() );
-					} catch (e:Dynamic) {
-						POSTPONED.set( TPath( c ).toString(), td );
-						LINEAGE.set( TPath( c ).toString(), td.pack.toDotPath( td.name ) );
-						continue;
-					}
-					
-				case _:
+		for (key in RETYPE.keys()) if (cls.meta.has( key )) {
+			// Build the cache.
+			if (!RETYPE_PREVIOUS.exists( cls.pack.toDotPath( cls.name ) )) {
+				RETYPE_PREVIOUS.set( cls.pack.toDotPath( cls.name ), { cls:cls, name:cls.pack.toDotPath( cls.name ), fields:fields } );
+				
 			}
-			// Unfortuantly for this to work, all types must
-			// be in referenced by their full path. So Array<MyClass>
-			// must be Array<my.pack.to.MyClass>. This what the code
-			// below does.
-			/*for (field in td.fields) {
-				switch (field.kind) {
-					case FVar(t, e):
-						trace( t );
-						if (t != null) {
-							t = t.qualify();
-						} else if (e != null) {
-							t = Context.toComplexType( Context.typeof( e ) );
-						} else {
-							trace( field.name );
-						}
-						field.kind = FVar(t, e);
-						trace( t );
-					case FProp(g, s, t, e):
-						if (t != null) {
-							t = t.qualify();
-						} else if (e != null) {
-							t = Context.toComplexType( Context.typeof( e ) );
-						} else {
-							trace( field.name );
-						}
-						field.kind = FProp(g, s, t, e);
-						
-					case FFun(method):
-						for (arg in method.args) {
-							if (arg.type != null) {
-								arg.type = arg.type.qualify();
-							}
-						}
-						
-				}
-			}*/
-			buildLineage( td.pack.toDotPath( td.name ) );
 			
-			/*switch (td.kind) {
-				case TDClass(s, i, b): i.remove( { name: 'Klas', pack: [], params: [] } );
-				case _:
-			}*/
-			//trace( td.printTypeDefinition() );
-			Compiler.exclude( cls.pack.toDotPath( cls.name ) );
-			Context.defineType( td );
-			//Context.getType( td.path() );
+			// Run any pending calls to `KlasImp.retype`.
+			if (RETYPE_PENDING.exists( cls.pack.toDotPath( cls.name ) ) && RETYPE_PENDING.get( cls.pack.toDotPath( cls.name ) )) {
+				retype( cls.pack.toDotPath( cls.name ), key, cls, fields );
+				RETYPE_PENDING.set( cls.pack.toDotPath( cls.name ), false );
+				
+			}
+			
 		}
 		
 		return fields;
 	}
 	
-	private static var POSTPONED:StringMap<TypeDefinition> = new StringMap<TypeDefinition>();
-	private static var LINEAGE:StringMap<String> = new StringMap<String>();
-	
-	private static function buildLineage(path:String) {
-		//trace( path );
-		for (k in LINEAGE.keys() ) trace( k, LINEAGE.get( k ) );
-		for (k in POSTPONED.keys() ) trace( k, POSTPONED.get( k ) );
-		if (LINEAGE.exists( path ) && POSTPONED.exists( path )) {
+	public static function retype(path:String, metadata:String, ?cls:ClassType, ?fields:Array<Field>):Bool {
+		var result = false;
+		
+		if (RETYPE.exists( metadata ) && RETYPE_PREVIOUS.exists( path )) {
+			// Fetch the previous class and fields.
+			var prev = RETYPE_PREVIOUS.get( path );
 			
-			var td = POSTPONED.get( path );
-			buildLineage( td.pack.toDotPath( td.name ) );
+			// Set `cls` and `fields` only if the cache exists.
+			if (cls == null && prev != null) cls = prev.cls;
+			if (fields == null && prev != null) fields = prev.fields;
+			if (prev.name == null || prev.name == '') prev.name = cls.pack.toDotPath( cls.name );
 			
-			trace( td );
-			//Compiler.exclude( path );
-			Context.defineType( td );
+			if (cls != null && fields != null) {
+				// Pass `cls` and `fields` to the retype handler to get a `typedefinition` back.
+				var td = RETYPE.get( metadata )( cls, fields );
+				
+				if (td == null) return false;
+				
+				var nativeF = metadataFilter.bind(_, ':native', cls.pack.toDotPath( cls.name ));
+				
+				// Check if `@:native('path.to.Class')` exists. Add if it doesnt exist.
+				if (td.meta != null && td.meta.exists( nativeF )) for (m in td.meta.filter( nativeF )) td.meta.remove( m );
+				td.meta.push( { name:':native', params:[macro $v { cls.pack.toDotPath( cls.name ) } ], pos:cls.pos } );
+				
+				// Remove the previous class for the the current compile.
+				Compiler.exclude( prev.name );
+				
+				// Add the "retyped" class into the current compile.
+				Context.defineType( td );
+				
+				// Cache the "retyped" fields in case of another "retype"
+				prev.fields = td.fields;
+				prev.name = td.pack.toDotPath( td.name );
+				//prev.cls = Context.getType( td.pack.toDotPath( td.name ) );
+				
+				RETYPE_PREVIOUS.set( path, prev );
+				
+				result = true;
+				
+			}
+			
+		} else {
+			RETYPE_PENDING.set( path, true );
+			if (cls != null && fields != null) RETYPE_PREVIOUS.set( path, { cls:cls, name:cls.pack.toDotPath( cls.name ), fields:fields } );
 			
 		}
+		
+		return result;
+	}
+	
+	private static function metadataFilter(meta:MetadataEntry, tag:String, pack:String):Bool {
+		return meta.name == tag && printer.printExprs( meta.params, '.' ).indexOf( pack ) > -1;
 	}
 	
 }
