@@ -81,7 +81,7 @@ class KlasImp {
 			history.set( cls.pack.toDotPath( cls.name ), [for (field in fields) field.name] );
 		}*/
 		
-		initalize();
+		initialize();
 		if (cls.meta.has(':KLAS_SKIP')) return fields;
 		
 		// Call all callbacks.
