@@ -165,8 +165,10 @@ class KlasImp {
 				
 				var nativeF = metadataFilter.bind(_, ':native', cls.pack.toDotPath( cls.name ));
 				
-				// Check if `@:native('path.to.Class')` exists. Add if it doesnt exist.
+				// Check if `@:native('path.to.Class')` exists. Remove any found.
 				if (td.meta != null && td.meta.exists( nativeF )) for (m in td.meta.filter( nativeF )) td.meta.remove( m );
+				
+				// Add `@:native` and use the original package and type name.
 				td.meta.push( { name:':native', params:[macro $v { cls.pack.toDotPath( cls.name ) } ], pos:cls.pos } );
 				
 				// If the TypeDefinition::name is the same as `cls.name`, modify it.
@@ -177,14 +179,12 @@ class KlasImp {
 				
 				// Remove the previous class for the the current compile.
 				Compiler.exclude( prev.name );
-				trace( new Printer().printTypeDefinition( td, true ) );
 				// Add the "retyped" class into the current compile.
 				Context.defineType( td );
 				
-				// Cache the "retyped" fields in case of another "retype"
+				// Cache the "retyped" fields in case of another "retype".
 				prev.fields = td.fields;
 				prev.name = td.pack.toDotPath( td.name );
-				//prev.cls = Context.getType( td.pack.toDotPath( td.name ) );
 				
 				RETYPE_PREVIOUS.set( path, prev );
 				
