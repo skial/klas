@@ -28,7 +28,7 @@ class KlasImp {
 	
 	public static var isSetup:Bool = false;
 	
-	public static function initalize() {
+	public static function initialize() {
 		if (isSetup == null || isSetup == false) {
 			history = new StringMap();
 			DEFAULTS = new StringMap();

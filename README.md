@@ -1,7 +1,7 @@
 # Klas
 
 Klas gives you more control on the order build macros are run. With Klas you only
-have to add `implements Klas` to your class and any build macro that self registars
+have to add `implements Klas` to your class and any build macro that self registers
 with Klas can be accessed with metadata.
 
 <table>
@@ -48,7 +48,7 @@ To add your build macro to Klas you need to do two things.
 	```Haxe
 	private static function initialize() {
 		try {
-			KlasImp.initalize();
+			KlasImp.initialize();
 		} catch (e:Dynamic) {
 			// This assumes that `implements Klas` is not being used
 			// but `@:autoBuild` or `@:build` metadata is being used 
@@ -62,13 +62,13 @@ To add your build macro to Klas you need to do two things.
 3. 	If your build macro does not already have an `extraParams.hxml` file, create one
 	in the root of your library.
 4.	Add `--macro path.to.your.Class.initialize()` to your `extraParams.hxml` file.
-5.	Any one using Klas and your macro library, with all the correct `-lib` 
+5.	Anyone using Klas and your macro library, with all the correct `-lib` 
 	entries will automatically bootstrap themselves into Klas.
 	
 ## Build hooks
 
 Klas provides the following hooks/variables you can register with. You would place
-the hook after the line `KlasImp.initalize();` in your `initialize` method.
+the hook after the line `KlasImp.initialize();` in your `initialize` method.
 
 1. 	The `ONCE` array will run your callback the first time Klas is initialized. Your
 	handler should be of the type `Void->Void`.
@@ -76,7 +76,7 @@ the hook after the line `KlasImp.initalize();` in your `initialize` method.
 	// Hooking into Klas.
 	private static function initialize() {
 		try {
-			KlasImp.initalize();
+			KlasImp.initialize();
 			KlasImp.ONCE.push( ClsMacro.handler );
 		} catch (e:Dynamic) { 
 			
@@ -92,7 +92,7 @@ the hook after the line `KlasImp.initalize();` in your `initialize` method.
 	// Hooking into Klas.
 	private static function initialize() {
 		try {
-			KlasImp.initalize();
+			KlasImp.initialize();
 			KlasImp.DEFAULTS.set( 'path.to.your.Cls', ClsMacro.handler );
 		} catch (e:Dynamic) { 
 			
@@ -115,7 +115,7 @@ the hook after the line `KlasImp.initalize();` in your `initialize` method.
 	// Hooking into Klas.
 	private static function initialize() {
 		try {
-			KlasImp.initalize();
+			KlasImp.initialize();
 			KlasImp.CLASS_META.set( ':metadata', ClsMacro.handler );
 		} catch (e:Dynamic) { 
 			
@@ -141,7 +141,7 @@ the hook after the line `KlasImp.initalize();` in your `initialize` method.
 	// Hooking into Klas.
 	private static function initialize() {
 		try {
-			KlasImp.initalize();
+			KlasImp.initialize();
 			KlasImp.FIELD_META.set( ':metadata', ClsMacro.handler );
 		} catch (e:Dynamic) { 
 			
@@ -169,7 +169,7 @@ the hook after the line `KlasImp.initalize();` in your `initialize` method.
 	// Hooking into Klas.
 	private static function initialize() {
 		try {
-			KlasImp.initalize();
+			KlasImp.initialize();
 			KlasImp.INLINE_META.set( ~/@:metadata\s/, ClsMacro.handler );
 		} catch (e:Dynamic) { 
 			
@@ -185,7 +185,7 @@ the hook after the line `KlasImp.initalize();` in your `initialize` method.
 	// Hooking into Klas.
 	private static function initialize() {
 		try {
-			KlasImp.initalize();
+			KlasImp.initialize();
 			KlasImp.RETYPE.set( ':metadata', ClsMacro.handler );
 		} catch (e:Dynamic) { 
 			
@@ -211,7 +211,7 @@ the hook after the line `KlasImp.initalize();` in your `initialize` method.
 6.	`RETYPE`
 
 `RETYPE` will only run after `DEFAULTS` if any pending calls to `uhx.macro.KlasImp.retype` exist.
-Otherwise it runs when ever it is called with `uhx.macro.KlasImp.retype`.
+Otherwise it runs whenever it is called with `uhx.macro.KlasImp.retype`.
 
 ## Example
 
@@ -220,7 +220,7 @@ The following `initialize`, `build` and `handler` methods are taken from [Wait.h
 ```Haxe
 	private static function initialize() {
 		try {
-			KlasImp.initalize();
+			KlasImp.initialize();
 			KlasImp.INLINE_META.set( ~/@:wait\s/, Wait.handler );
 		} catch (e:Dynamic) {
 			// This assumes that `implements Klas` is not being used
@@ -258,6 +258,6 @@ The following `initialize`, `build` and `handler` methods are taken from [Wait.h
 1.	[yield](https://github.com/skial/yield)
 2.	[wait](https://github.com/skial/wait)
 3.	[cmd](https://github.com/skial/cmd)
-3.	[named](https://github.com/skial/named)
-4.	[seri](https://github.com/skial/seri)
-4.	[3rd_klas](https://github.com/skial/3rd_klas)
+4.	[named](https://github.com/skial/named)
+5.	[seri](https://github.com/skial/seri)
+6.	[3rd_klas](https://github.com/skial/3rd_klas)
