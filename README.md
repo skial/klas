@@ -4,12 +4,35 @@ Klas gives you more control on the order build macros are run. With Klas you onl
 have to add `implements Klas` to your class and any build macro that self registars
 with Klas can be accessed with metadata.
 
+<table>
+	<tr>
+		<td><a href="#installation">Installation</a></td>
+		<td><a href="#setup">Setup</a></td>
+		<td><a href="#register-a-build-macro-with-klas">Register w/ Klas</a></td>
+		<td><a href="#build-hooks">Build Hooks</a></td>
+		<td><a href="#build-order">Build Order</a></td>
+		<td><a href="#example">Example</a></td>
+		<td><a href="#libraries-using-klas">Libs using Klas</a></td>
+	</tr>
+</table>
+
 ## Installation
 
-1.	With HaxeLib Git: `haxelib git klas https://github.com/skial/klas master src`
-2.	With HaxeLib Local:
-		+ Download - `https://github.com/skial/klas/archive/master.zip`
-		+ Install - `haxelib local master.zip`
+With haxelib git.
+	
+```hxml
+haxelib git klas https://github.com/skial/klas master src
+```
+
+With haxelib local.
+	
+```hxml
+# Download the archive.
+https://github.com/skial/klas/archive/master.zip
+
+# Install archive contents.
+haxelib local master.zip
+```
 
 ## Setup
 
@@ -42,7 +65,7 @@ To add your build macro to Klas you need to do two things.
 5.	Any one using Klas and your macro library, with all the correct `-lib` 
 	entries will automatically bootstrap themselves into Klas.
 	
-## Klas hooks
+## Build hooks
 
 Klas provides the following hooks/variables you can register with. You would place
 the hook after the line `KlasImp.initalize();` in your `initialize` method.
@@ -64,7 +87,7 @@ the hook after the line `KlasImp.initalize();` in your `initialize` method.
 	To trigger a retype, you have to call `uhx.macro.KlasImp.retype('your.Class', ':metadata')`. 
 	This should only be called during the macro context.
 
-## Klas hook run order
+## Build order
 
 1.	`ONCE`
 2.	`CLASS_META`
