@@ -70,22 +70,136 @@ To add your build macro to Klas you need to do two things.
 Klas provides the following hooks/variables you can register with. You would place
 the hook after the line `KlasImp.initalize();` in your `initialize` method.
 
-1. 	The `ONCE` array will run your callback the first time Klas is initialized.
+1. 	The `ONCE` array will run your callback the first time Klas is initialized. Your
+	handler should be of the type `Void->Void`.
+	```Haxe
+	// Hooking into Klas.
+	private static function initialize() {
+		try {
+			KlasImp.initalize();
+			KlasImp.ONCE.push( ClsMacro.handler );
+		} catch (e:Dynamic) { 
+			
+		}
+	}
+	```
+	
 2. 	The `DEFAULTS` string map allows you to register your callback which will be run for
-	each class that `implements Klas`. Your handler should be of the type `Void->Void`.
+	each class that `implements Klas`. Your handler should be of the type 
+	`ClassType->Array<Field>->Array<Field>`. The string map key should be unique, 
+	it is recommended to use your library path as the key.
+	```Haxe
+	// Hooking into Klas.
+	private static function initialize() {
+		try {
+			KlasImp.initalize();
+			KlasImp.DEFAULTS.set( 'path.to.your.Cls', ClsMacro.handler );
+		} catch (e:Dynamic) { 
+			
+		}
+	}
+	```
+	
 3.	The `CLASS_META` string map allows you to register your interest in classes that have a 
-	specific meta tag attached to them. Your handler should be of the type 
+	specific metadata attached to them. Your handler should be of the type 
 	`ClassType->Array<Field>->Array<Field>`.
+	```Haxe
+	package path.to.your;
+	
+	@:metadata('value1', 'value2') class Cls {
+		
+	}
+	```
+	
+	```Haxe
+	// Hooking into Klas.
+	private static function initialize() {
+		try {
+			KlasImp.initalize();
+			KlasImp.CLASS_META.set( ':metadata', ClsMacro.handler );
+		} catch (e:Dynamic) { 
+			
+		}
+	}
+	```
+	
 4.	The `FIELD_META` string map allows you to register your interest in methods and variables
 	that have a specific meta tag attached to them. Your handler should be of the type
 	`ClassType->Field->Field`.
-5.	The `INLINE_META` ereg map allows you to register your interest in methods that contain an
-	inline meta tag, eg `var a = @:metadata 100;` Your handler should be of the type
-	`ClassType->Field->Field`.
+	```Haxe
+	package path.to.your;
+	
+	class Cls {
+		
+		@:metadata public static var hello = 'hello';
+		@:metadata public static function main() {}
+		
+	}
+	```
+	
+	```Haxe
+	// Hooking into Klas.
+	private static function initialize() {
+		try {
+			KlasImp.initalize();
+			KlasImp.FIELD_META.set( ':metadata', ClsMacro.handler );
+		} catch (e:Dynamic) { 
+			
+		}
+	}
+	```
+	
+5.	The `INLINE_META` EReg map allows you to register your interest in methods that contain
+	inline metadata. Your handler should be of the type `ClassType->Field->Field`.
+	```Haxe
+	package path.to.your;
+	
+	class Cls {
+		
+		public function new() {}
+		
+		public function setup():Void {
+			var a = @:metadata 100;
+		}
+		
+	}
+	```
+	
+	```Haxe
+	// Hooking into Klas.
+	private static function initialize() {
+		try {
+			KlasImp.initalize();
+			KlasImp.INLINE_META.set( ~/@:metadata\s/, ClsMacro.handler );
+		} catch (e:Dynamic) { 
+			
+		}
+	}
+	```
+	
 6.	The `RETYPE` string map allows you to register a handler which will return a rebuilt type.
 	Your handler should be of the type `ClassType->Array<Field>->Null<TypeDefinition>`.
 	To trigger a retype, you have to call `uhx.macro.KlasImp.retype('your.Class', ':metadata')`. 
 	This should only be called during the macro context.
+	```Haxe
+	// Hooking into Klas.
+	private static function initialize() {
+		try {
+			KlasImp.initalize();
+			KlasImp.RETYPE.set( ':metadata', ClsMacro.handler );
+		} catch (e:Dynamic) { 
+			
+		}
+	}
+	```
+	
+	```Haxe
+	// Triggering a retype.
+	private static macro function hello_world():ExprOf<String> {
+		uhx.macro.KlasImp.retype('path.to.your.Cls', ':metadata');
+		return macro 'Hello World';
+	}
+	```
 
 ## Build order
 
