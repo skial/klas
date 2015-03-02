@@ -2,16 +2,15 @@
 
 Klas gives you more control on the order build macros are run. With Klas you only
 have to add `implements Klas` to your class and any build macro that self registars
-with Klas can be accessed through macro metadata.
+with Klas can be accessed with metadata.
 
 ## Installation
 
-1. klas:
-	+ git - `haxelib git klas https://github.com/skial/klas master src`
-	+ zip:
-		* download - `https://github.com/skial/klas/archive/master.zip`
-		* install - `haxelib local master.zip`
-		
+1.	With HaxeLib Git: `haxelib git klas https://github.com/skial/klas master src`
+2.	With HaxeLib Local:
+		+ Download - `https://github.com/skial/klas/archive/master.zip`
+		+ Install - `haxelib local master.zip`
+
 ## Setup
 
 Add `implements Klas` to any class. Make sure `-lib klas` is in your `.hxml` build
@@ -19,7 +18,7 @@ file.
 
 ## Register a build macro with Klas
 
-To add your build macro to Klas you need to do two thing.s
+To add your build macro to Klas you need to do two things.
 
 1.	Add the following `initialize` method to your build macro.
 
@@ -30,22 +29,23 @@ To add your build macro to Klas you need to do two thing.s
 		} catch (e:Dynamic) {
 			// This assumes that `implements Klas` is not being used
 			// but `@:autoBuild` or `@:build` metadata is being used 
-			// with the provided `you.macro.Class.build()` method.
+			// with the provided `your.macro.Class.build()` method.
 		}
 	}
 	```
 	
 2.	You should also provide a normal entry point for people not using Klas, who will
-	be using `@:autoBuild` or `@:build` metadata.
-3. 	If your build macro doesnt already have an `extraParams.hxml` file, create one
-	in the root of your macro library.
-4.	Add `--macro path.to.your.Class.initialize()` to your `.hxml` build file.
+	be using the `@:autoBuild` or `@:build` metadata.
+3. 	If your build macro does not already have an `extraParams.hxml` file, create one
+	in the root of your library.
+4.	Add `--macro path.to.your.Class.initialize()` to your `extraParams.hxml` file.
 5.	Any one using Klas and your macro library, with all the correct `-lib` 
-	entries should automatically bootstrap themselves into Klas.
+	entries will automatically bootstrap themselves into Klas.
 	
 ## Klas hooks
 
-Klas provides the following hooks/variables you can register with.
+Klas provides the following hooks/variables you can register with. You would place
+the hook after the line `KlasImp.initalize();` in your `initialize` method.
 
 1. 	The `ONCE` array will run your callback the first time Klas is initialized.
 2. 	The `DEFAULTS` string map allows you to register your callback which will be run for
@@ -59,12 +59,24 @@ Klas provides the following hooks/variables you can register with.
 5.	The `INLINE_META` ereg map allows you to register your interest in methods that contain an
 	inline meta tag, eg `var a = @:metadata 100;` Your handler should be of the type
 	`ClassType->Field->Field`.
-6.	The `RETYPE` string map allows you to register a handler which will return a rebuilt type
-	with matching metadata. You handler should be of the type `ClassType->Array<Field>->Null<TypeDefinition>`.
-	To trigger a retype, you have to call `uhx.macro.KlasImp.retype('your.Class', ':metadata')`. This should
-	only be called in the macro context.
-	
-You would place the hook after the line `KlasImp.initalize();` in your `initialize` method.
+6.	The `RETYPE` string map allows you to register a handler which will return a rebuilt type.
+	Your handler should be of the type `ClassType->Array<Field>->Null<TypeDefinition>`.
+	To trigger a retype, you have to call `uhx.macro.KlasImp.retype('your.Class', ':metadata')`. 
+	This should only be called during the macro context.
+
+## Klas hook run order
+
+1.	`ONCE`
+2.	`CLASS_META`
+3.	`FIELD_META`
+4.	`INLINE_META`
+5.	`DEFAULTS`
+6.	`RETYPE`
+
+`RETYPE` will only run after `DEFAULTS` if any pending calls to `uhx.macro.KlasImp.retype` exist.
+Otherwise it runs when ever it is called with `uhx.macro.KlasImp.retype`.
+
+## Example
 
 The following `initialize`, `build` and `handler` methods are taken from [Wait.hx].
 
@@ -102,3 +114,13 @@ The following `initialize`, `build` and `handler` methods are taken from [Wait.h
 ```
 
 [wait.hx]: https://github.com/skial/wait/blob/master/src/uhx/macro/Wait.hx "Wait.hx"
+
+	
+## Libraries Using Klas
+
+1.	[yield](https://github.com/skial/yield)
+2.	[wait](https://github.com/skial/wait)
+3.	[cmd](https://github.com/skial/cmd)
+3.	[named](https://github.com/skial/named)
+4.	[seri](https://github.com/skial/seri)
+4.	[3rd_klas](https://github.com/skial/3rd_klas)
