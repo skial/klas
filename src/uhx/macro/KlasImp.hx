@@ -145,6 +145,8 @@ class KlasImp {
 		return fields;
 	}
 	
+	private static var RETYPE_COUNTER:Int = 0;
+	
 	public static function retype(path:String, metadata:String, ?cls:ClassType, ?fields:Array<Field>):Bool {
 		var result = false;
 		
@@ -173,7 +175,7 @@ class KlasImp {
 				
 				// If the TypeDefinition::name is the same as `cls.name`, modify it.
 				if (td.pack.toDotPath( td.name ) == cls.pack.toDotPath( cls.name ) || td.pack.toDotPath( td.name ) == prev.name) {
-					td.name += ('' + Date.now().getTime()).replace('+', '_').replace('.', '_');
+					td.name += ('' + Date.now().getTime() + '' + (RETYPE_COUNTER++)).replace('+', '_').replace('.', '_');
 					
 				}
 				
