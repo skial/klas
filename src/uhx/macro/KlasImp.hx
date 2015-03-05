@@ -1,7 +1,6 @@
 package uhx.macro;
 
 import haxe.Json;
-import haxe.macro.Printer;
 import sys.io.File;
 import sys.FileSystem;
 import sys.io.Process;
@@ -10,6 +9,7 @@ import haxe.macro.Type;
 import haxe.macro.Expr;
 import haxe.ds.StringMap;
 import haxe.macro.Context;
+import haxe.macro.Printer;
 import haxe.macro.Compiler;
 
 using Lambda;
