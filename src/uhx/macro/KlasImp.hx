@@ -24,7 +24,7 @@ using haxe.macro.MacroStringTools;
  * @author Skial Bainn
  */
 
-class KlasImp {
+@:KLAS_SKIP class KlasImp {
 	
 	public static var isSetup:Bool = false;
 	
@@ -43,6 +43,10 @@ class KlasImp {
 			
 			isSetup = true;
 		}
+	}
+	
+	public static function addGlobalMetadata(pathFilter:String, meta:String, ?recursive:Bool = true, ?toTypes:Bool = true, ?toFields:Bool = false) {
+		Compiler.addGlobalMetadata( pathFilter, meta, recursive, toTypes, toFields );
 	}
 	
 	public static var DEFAULTS:StringMap<ClassType->Array<Field>->Array<Field>>;
@@ -72,10 +76,16 @@ class KlasImp {
 	public static var printer:Printer = new Printer();
 	public static var history:StringMap<Array<String>>;
 	
-	public static function build():Array<Field> {
-		var cls = Context.getLocalClass().get();
+	public static function build(?isGlobal:Bool = false):Array<Field> {
 		var fields = Context.getBuildFields();
 		
+		if (Context.getLocalClass() == null) return fields;
+		
+		var cls = Context.getLocalClass().get();
+		
+		for (face in cls.interfaces) if (face.t.toString() == 'Klas' && isGlobal) return fields;
+		
+		trace( cls.pack.toDotPath( cls.name ) );
 		// Populate history
 		/*if (!history.exists( cls.pack.toDotPath( cls.name ) )) {
 			history.set( cls.pack.toDotPath( cls.name ), [for (field in fields) field.name] );
