@@ -73,8 +73,20 @@ using haxe.macro.MacroStringTools;
 	 */
 	public static var RETYPE_PREVIOUS:StringMap<{ name:String, cls:ClassType, fields:Array<Field> }>;
 	
-	public static var printer:Printer = new Printer();
-	public static var history:StringMap<Array<String>>;
+	private static var printer:Printer = new Printer();
+	private static var history:StringMap<{ type:Type, fields:Array<Field> }>;
+	
+	public static function inspect():Array<Field> {
+		var type = Context.getLocalType();
+		var fields = Context.getBuildFields();
+		
+		if (type != null && !history.exists( '$type' )) {
+			history.set( '$type', { type:type, fields:fields } );
+			
+		}
+		
+		return fields;
+	}
 	
 	public static function build(?isGlobal:Bool = false):Array<Field> {
 		var fields = Context.getBuildFields();
@@ -83,13 +95,8 @@ using haxe.macro.MacroStringTools;
 		
 		var cls = Context.getLocalClass().get();
 		
+		// This detects classes which have `implements Klas` and `@:build(uhx.macro.KlasImp.build(true))`.
 		for (face in cls.interfaces) if (face.t.toString() == 'Klas' && isGlobal) return fields;
-		
-		trace( cls.pack.toDotPath( cls.name ) );
-		// Populate history
-		/*if (!history.exists( cls.pack.toDotPath( cls.name ) )) {
-			history.set( cls.pack.toDotPath( cls.name ), [for (field in fields) field.name] );
-		}*/
 		
 		initialize();
 		if (cls.meta.has(':KLAS_SKIP')) return fields;
