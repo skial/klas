@@ -41,6 +41,9 @@ using haxe.macro.MacroStringTools;
 			RETYPE_PENDING = new StringMap();
 			RETYPE_PREVIOUS = new StringMap();
 			
+			INFO = new StringMap();
+			INFO_PENDING = new StringMap();
+			
 			isSetup = true;
 		}
 	}
@@ -73,22 +76,67 @@ using haxe.macro.MacroStringTools;
 	 */
 	public static var RETYPE_PREVIOUS:StringMap<{ name:String, cls:ClassType, fields:Array<Field> }>;
 	
+	private static var RETYPE_COUNTER:Int = 0;
+	
+	/**
+	 * A map of callbacks that are interested in information for a
+	 * perticular type.
+	 */
+	public static var INFO:StringMap<Array<Type->Array<Field>->Void>>;
+	
+	public static var INFO_PENDING:StringMap<Array<Type->Array<Field>->Void>>;
+	
 	private static var printer:Printer = new Printer();
+	
+	/**
+	 * Holds a list of types and their fields internally if global build has 
+	 * been forced on all types.
+	 */
 	private static var history:StringMap<{ type:Type, fields:Array<Field> }>;
 	
-	public static function inspect():Array<Field> {
+	/**
+	 * Called by KlasImp's `extraParams.hxml` file for globally applied
+	 * metadata.
+	 */
+	public static function inspection():Array<Field> {
 		var type = Context.getLocalType();
 		var fields = Context.getBuildFields();
 		
-		if (type != null && !history.exists( '$type' )) {
-			history.set( '$type', { type:type, fields:fields } );
+		if (type != null && !history.exists( type.toString() )) {
+			history.set( type.toString(), { type:type, fields:fields } );
 			
 		}
+		
+		processHistory();
 		
 		return fields;
 	}
 	
+	private static function processHistory():Void {
+		var _history = null;
+		
+		for (key in INFO.keys()) if (history.exists( key )) {
+			_history = history.get( key );
+			
+			// Process any pending calls.
+			if (INFO_PENDING.exists( key )) {
+				for (cb in INFO_PENDING.get( key )) {
+					cb( _history.type, _history.fields );
+				}
+				
+				INFO_PENDING.remove( key );
+				
+			}
+			
+			for (cb in INFO.get( key )) cb( _history.type, _history.fields );
+			
+			// All callbacks have been called, clear from the map.
+			INFO.remove( key );
+		}
+	}
+	
 	public static function build(?isGlobal:Bool = false):Array<Field> {
+		var type = Context.getLocalType();
 		var fields = Context.getBuildFields();
 		
 		if (Context.getLocalClass() == null) return fields;
@@ -99,6 +147,15 @@ using haxe.macro.MacroStringTools;
 		for (face in cls.interfaces) if (face.t.toString() == 'Klas' && isGlobal) return fields;
 		
 		initialize();
+		
+		// Populate `history`.
+		if (type != null && !history.exists( type.toString() )) {
+			history.set( type.toString(), { type:type, fields:fields } );
+			
+		}
+		
+		processHistory();
+		
 		if (cls.meta.has(':KLAS_SKIP')) return fields;
 		
 		// Call all callbacks.
@@ -162,8 +219,6 @@ using haxe.macro.MacroStringTools;
 		return fields;
 	}
 	
-	private static var RETYPE_COUNTER:Int = 0;
-	
 	public static function retype(path:String, metadata:String, ?cls:ClassType, ?fields:Array<Field>):Bool {
 		var result = false;
 		
@@ -214,6 +269,37 @@ using haxe.macro.MacroStringTools;
 		} else {
 			RETYPE_PENDING.set( path, true );
 			if (cls != null && fields != null) RETYPE_PREVIOUS.set( path, { cls:cls, name:cls.pack.toDotPath( cls.name ), fields:fields } );
+			
+		}
+		
+		return result;
+	}
+	
+	public static function inspect(path:String, callback:Type->Array<Field>->Void):Bool {
+		var result = false;
+		var _history = null;
+		
+		if (history.exists( path )) {
+			_history = history.get( path );
+			
+			// Process any pending calls.
+			if (INFO_PENDING.exists( path )) {
+				for (cb in INFO_PENDING.get( path )) {
+					cb( _history.type, _history.fields );
+				}
+				
+				INFO_PENDING.remove( path );
+				
+			}
+			
+			callback( _history.type, _history.fields );
+			result = true;
+			
+		} else {
+			var callbacks = INFO_PENDING.exists( path ) ? INFO_PENDING.get( path ) : [];
+			callbacks.push( callback );
+			
+			INFO_PENDING.set( path, callbacks );
 			
 		}
 		
