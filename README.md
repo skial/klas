@@ -70,6 +70,27 @@ To add your build macro to Klas you need to do two things.
 Klas provides the following hooks/variables you can register with. You would place
 the hook after the line `KlasImp.initialize();` in your `initialize` method.
 
+1.	The `INFO` string map allows your to register a callback which allows you to
+	inspect the `Type` and its build fields if the `Type` has any. It is
+	recommended that you __don't__ modify the build fields during this point. The
+	string map key should be the path to the type you are interest in and your
+	handler type should be `Array<Type->Array<Field>->Void>`.
+	```Haxe
+	// Hooking into Klas.
+	private static function initialize() {
+		try {
+			KlasImp.initialize();
+			KlasImp.INFO.set( 'path.to.your.Type', ClsMacro.handler );
+		} catch (e:Dynamic) { 
+			
+		}
+	}
+	```
+	
+	You can request to inspect a type by calling `uhx.macro.KlasImp.inspect('path.to.your.Type', Your.callback)`
+	which will run `Your.callback` once the `Type` has been processed by Klas. Your 
+	callback should have the type of `Type->Array<Field>->Void`.
+
 1. 	The `ONCE` array will run your callback the first time Klas is initialized. Your
 	handler should be of the type `Void->Void`.
 	```Haxe
@@ -203,12 +224,15 @@ the hook after the line `KlasImp.initialize();` in your `initialize` method.
 
 ## Build order
 
+1.	`INFO`
 1.	`ONCE`
 2.	`CLASS_META`
 3.	`FIELD_META`
 4.	`INLINE_META`
 5.	`DEFAULTS`
 6.	`RETYPE`
+
+The `INFO` hook _might_ be processed before all other hooks.
 
 `RETYPE` will only run after `DEFAULTS` if any pending calls to `uhx.macro.KlasImp.retype` exist.
 Otherwise it runs whenever it is called with `uhx.macro.KlasImp.retype`.

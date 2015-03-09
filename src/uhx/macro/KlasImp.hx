@@ -24,7 +24,7 @@ using haxe.macro.MacroStringTools;
  * @author Skial Bainn
  */
 
-class KlasImp {
+@:KLAS_SKIP class KlasImp {
 	
 	public static var isSetup:Bool = false;
 	
@@ -41,8 +41,15 @@ class KlasImp {
 			RETYPE_PENDING = new StringMap();
 			RETYPE_PREVIOUS = new StringMap();
 			
+			INFO = new StringMap();
+			INFO_PENDING = new StringMap();
+			
 			isSetup = true;
 		}
+	}
+	
+	public static function addGlobalMetadata(pathFilter:String, meta:String, ?recursive:Bool = true, ?toTypes:Bool = true, ?toFields:Bool = false) {
+		Compiler.addGlobalMetadata( pathFilter, meta, recursive, toTypes, toFields );
 	}
 	
 	public static var DEFAULTS:StringMap<ClassType->Array<Field>->Array<Field>>;
@@ -69,19 +76,104 @@ class KlasImp {
 	 */
 	public static var RETYPE_PREVIOUS:StringMap<{ name:String, cls:ClassType, fields:Array<Field> }>;
 	
-	public static var printer:Printer = new Printer();
-	public static var history:StringMap<Array<String>>;
+	/**
+	 * A simple counter used in the naming of new `TypeDefinition`.
+	 */
+	private static var RETYPE_COUNTER:Int = 0;
 	
-	public static function build():Array<Field> {
-		var cls = Context.getLocalClass().get();
+	/**
+	 * A map of callbacks that are interested in information for a
+	 * perticular type.
+	 */
+	public static var INFO:StringMap<Array<Type->Array<Field>->Void>>;
+	
+	/**
+	 * Holds paths, which are the key, with an array of callbacks
+	 * wanting to inspect `Type` and `Array<Field>`. You should not
+	 * modify any of the `Field`.
+	 */
+	public static var INFO_PENDING:StringMap<Array<Type->Array<Field>->Void>>;
+	
+	/**
+	 * Used to turn `Expr` and `TypeDefinition` into readable Haxe code.
+	 */
+	private static var printer:Printer = new Printer();
+	
+	/**
+	 * Holds a list of types and their fields internally if global build has 
+	 * been forced on all types.
+	 */
+	private static var history:StringMap<{ type:Type, fields:Array<Field> }>;
+	
+	/**
+	 * Called by KlasImp's `extraParams.hxml` file for globally applied
+	 * metadata.
+	 */
+	public static function inspection():Array<Field> {
+		var type = Context.getLocalType();
 		var fields = Context.getBuildFields();
 		
-		// Populate history
-		/*if (!history.exists( cls.pack.toDotPath( cls.name ) )) {
-			history.set( cls.pack.toDotPath( cls.name ), [for (field in fields) field.name] );
-		}*/
+		if (type != null && !history.exists( type.toString() )) {
+			history.set( type.toString(), { type:type, fields:fields } );
+			
+		}
+		
+		processHistory();
+		
+		return fields;
+	}
+	
+	/**
+	 * Processes any methods interested in a specific `Type`.
+	 */
+	private static function processHistory():Void {
+		var _history = null;
+		
+		for (key in INFO.keys()) if (history.exists( key )) {
+			_history = history.get( key );
+			
+			// Process any pending calls.
+			if (INFO_PENDING.exists( key )) {
+				for (cb in INFO_PENDING.get( key )) {
+					cb( _history.type, _history.fields );
+				}
+				
+				INFO_PENDING.remove( key );
+				
+			}
+			
+			for (cb in INFO.get( key )) cb( _history.type, _history.fields );
+			
+			// All callbacks have been called, clear from the map.
+			INFO.remove( key );
+		}
+	}
+	
+	/**
+	 * The main build method which passes Classes and their fields
+	 * to other build macros.
+	 */
+	public static function build(?isGlobal:Bool = false):Array<Field> {
+		var type = Context.getLocalType();
+		var fields = Context.getBuildFields();
+		
+		if (Context.getLocalClass() == null) return fields;
+		
+		var cls = Context.getLocalClass().get();
+		
+		// This detects classes which have `implements Klas` and `@:build(uhx.macro.KlasImp.build(true))`.
+		for (face in cls.interfaces) if (face.t.toString() == 'Klas' && isGlobal) return fields;
 		
 		initialize();
+		
+		// Populate `history`.
+		if (type != null && !history.exists( type.toString() )) {
+			history.set( type.toString(), { type:type, fields:fields } );
+			
+		}
+		
+		processHistory();
+		
 		if (cls.meta.has(':KLAS_SKIP')) return fields;
 		
 		// Call all callbacks.
@@ -145,8 +237,10 @@ class KlasImp {
 		return fields;
 	}
 	
-	private static var RETYPE_COUNTER:Int = 0;
-	
+	/**
+	 * Starts the process of rebuilding a Class and its fields. Returns `true`
+	 * is the rebuilt was a success, `false` otherwise.
+	 */
 	public static function retype(path:String, metadata:String, ?cls:ClassType, ?fields:Array<Field>):Bool {
 		var result = false;
 		
@@ -197,6 +291,42 @@ class KlasImp {
 		} else {
 			RETYPE_PENDING.set( path, true );
 			if (cls != null && fields != null) RETYPE_PREVIOUS.set( path, { cls:cls, name:cls.pack.toDotPath( cls.name ), fields:fields } );
+			
+		}
+		
+		return result;
+	}
+	
+	/**
+	 * Calls the `callback` for the specific `path` allowing you to
+	 * look at a Type and its fields. Returns `true` if it ran your
+	 * `callback` now or `false` if it cached your `callback`.
+	 */
+	public static function inspect(path:String, callback:Type->Array<Field>->Void):Bool {
+		var result = false;
+		var _history = null;
+		
+		if (history.exists( path )) {
+			_history = history.get( path );
+			
+			// Process any pending calls.
+			if (INFO_PENDING.exists( path )) {
+				for (cb in INFO_PENDING.get( path )) {
+					cb( _history.type, _history.fields );
+				}
+				
+				INFO_PENDING.remove( path );
+				
+			}
+			
+			callback( _history.type, _history.fields );
+			result = true;
+			
+		} else {
+			var callbacks = INFO_PENDING.exists( path ) ? INFO_PENDING.get( path ) : [];
+			callbacks.push( callback );
+			
+			INFO_PENDING.set( path, callbacks );
 			
 		}
 		
