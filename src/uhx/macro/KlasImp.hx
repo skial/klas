@@ -76,6 +76,9 @@ using haxe.macro.MacroStringTools;
 	 */
 	public static var RETYPE_PREVIOUS:StringMap<{ name:String, cls:ClassType, fields:Array<Field> }>;
 	
+	/**
+	 * A simple counter used in the naming of new `TypeDefinition`.
+	 */
 	private static var RETYPE_COUNTER:Int = 0;
 	
 	/**
@@ -84,8 +87,16 @@ using haxe.macro.MacroStringTools;
 	 */
 	public static var INFO:StringMap<Array<Type->Array<Field>->Void>>;
 	
+	/**
+	 * Holds paths, which are the key, with an array of callbacks
+	 * wanting to inspect `Type` and `Array<Field>`. You should not
+	 * modify any of the `Field`.
+	 */
 	public static var INFO_PENDING:StringMap<Array<Type->Array<Field>->Void>>;
 	
+	/**
+	 * Used to turn `Expr` and `TypeDefinition` into readable Haxe code.
+	 */
 	private static var printer:Printer = new Printer();
 	
 	/**
@@ -112,6 +123,9 @@ using haxe.macro.MacroStringTools;
 		return fields;
 	}
 	
+	/**
+	 * Processes any methods interested in a specific `Type`.
+	 */
 	private static function processHistory():Void {
 		var _history = null;
 		
@@ -135,6 +149,10 @@ using haxe.macro.MacroStringTools;
 		}
 	}
 	
+	/**
+	 * The main build method which passes Classes and their fields
+	 * to other build macros.
+	 */
 	public static function build(?isGlobal:Bool = false):Array<Field> {
 		var type = Context.getLocalType();
 		var fields = Context.getBuildFields();
@@ -219,6 +237,10 @@ using haxe.macro.MacroStringTools;
 		return fields;
 	}
 	
+	/**
+	 * Starts the process of rebuilding a Class and its fields. Returns `true`
+	 * is the rebuilt was a success, `false` otherwise.
+	 */
 	public static function retype(path:String, metadata:String, ?cls:ClassType, ?fields:Array<Field>):Bool {
 		var result = false;
 		
@@ -275,6 +297,11 @@ using haxe.macro.MacroStringTools;
 		return result;
 	}
 	
+	/**
+	 * Calls the `callback` for the specific `path` allowing you to
+	 * look at a Type and its fields. Returns `true` if it ran your
+	 * `callback` now or `false` if it cached your `callback`.
+	 */
 	public static function inspect(path:String, callback:Type->Array<Field>->Void):Bool {
 		var result = false;
 		var _history = null;
