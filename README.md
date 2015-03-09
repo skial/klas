@@ -71,7 +71,7 @@ Klas provides the following hooks/variables you can register with. You would pla
 the hook after the line `KlasImp.initialize();` in your `initialize` method.
 
 1.	The `INFO` string map allows your to register a callback which allows you to
-	inspect the the `Type` and its build fields if the `Type` has any. It is
+	inspect the `Type` and its build fields if the `Type` has any. It is
 	recommended that you __don't__ modify the build fields during this point. The
 	string map key should be the path to the type you are interest in and your
 	handler type should be `Array<Type->Array<Field>->Void>`.
