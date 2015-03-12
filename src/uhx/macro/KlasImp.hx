@@ -176,6 +176,8 @@ using haxe.macro.MacroStringTools;
 		
 		processHistory();
 		
+		log( '$cls :: @:KLAS_SKIP == ' + cls.meta.has( ':KLAS_SKIP' ) );
+		
 		if (cls.meta.has(':KLAS_SKIP')) return fields;
 		
 		// Call all callbacks.
@@ -190,9 +192,13 @@ using haxe.macro.MacroStringTools;
 		 * while in IDE display mode, `-D display`.
 		 */
 		
+		log( 'CLASS_META :: ' + [for (key in CLASS_META.keys()) key] );
+		
 		for (key in CLASS_META.keys()) if (cls.meta.has( key )) {
 			fields = CLASS_META.get( key )( cls, fields );
 		}
+		
+		log( 'FIELD_META :: ' + [for (key in FIELD_META.keys()) key] );
 		
 		for (i in 0...fields.length) {
 			
@@ -216,9 +222,13 @@ using haxe.macro.MacroStringTools;
 			
 		}
 		
+		log( 'DEFAULTS :: ' + [for (key in DEFAULTS.keys()) key] );
+		
 		for (def in DEFAULTS) {
 			fields = def( cls, fields );
 		}
+		
+		log( 'RETYPE :: ' + [for (key in RETYPE.keys()) key] );
 		
 		for (key in RETYPE.keys()) if (cls.meta.has( key )) {
 			// Build the cache.
@@ -337,6 +347,12 @@ using haxe.macro.MacroStringTools;
 	
 	private static function metadataFilter(meta:MetadataEntry, tag:String, pack:String):Bool {
 		return meta.name == tag && printer.printExprs( meta.params, '.' ).indexOf( pack ) > -1;
+	}
+	
+	private static inline function log(value:String):Void {
+		#if klas_verbose
+		Sys.println( value );
+		#end
 	}
 	
 }
