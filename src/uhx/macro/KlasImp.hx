@@ -176,7 +176,7 @@ using haxe.macro.MacroStringTools;
 		
 		processHistory();
 		
-		log( cls.pack.toDotPath( cls.name ) + ' :: ' + [for (meta in cls.meta.get()) meta.name )] );
+		log( cls.pack.toDotPath( cls.name ) + ' :: ' + [for (meta in cls.meta.get()) meta.name ] );
 		
 		if (cls.meta.has(':KLAS_SKIP')) return fields;
 		
