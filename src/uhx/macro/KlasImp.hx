@@ -113,6 +113,8 @@ using haxe.macro.MacroStringTools;
 		var type = Context.getLocalType();
 		var fields = Context.getBuildFields();
 		
+		initialize();
+		
 		if (type != null && !history.exists( type.toString() )) {
 			history.set( type.toString(), { type:type, fields:fields } );
 			
