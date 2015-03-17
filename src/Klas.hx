@@ -11,4 +11,5 @@ package ;
 #if !macro
 @:autoBuild( uhx.macro.KlasImp.build() ) 
 #end
+@:remove
 interface Klas { }
