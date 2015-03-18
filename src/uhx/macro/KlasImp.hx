@@ -228,7 +228,7 @@ abstract Signal<T0, T1, T2>(Map<T0, KlasSignal<T1, T2>>) from Map<T0, KlasSignal
 	 * Called by KlasImp's `extraParams.hxml` file for globally applied
 	 * metadata.
 	 */
-	public static function inspection():Array<Field> {
+	@:noCompletion public static function inspection():Array<Field> {
 		var type = Context.getLocalType();
 		var fields = Context.getBuildFields();
 		
@@ -270,7 +270,7 @@ abstract Signal<T0, T1, T2>(Map<T0, KlasSignal<T1, T2>>) from Map<T0, KlasSignal
 		}
 	}
 	
-	public static function dependency():Array<Field> {
+	@:noCompletion public static function dependency():Array<Field> {
 		var type = Context.getLocalType();
 		var fields = Context.getBuildFields();
 		var key = type.toString();
@@ -304,7 +304,7 @@ abstract Signal<T0, T1, T2>(Map<T0, KlasSignal<T1, T2>>) from Map<T0, KlasSignal
 	 * The main build method which passes Classes and their fields
 	 * to other build macros.
 	 */
-	public static function build(?isGlobal:Bool = false):Array<Field> {
+	@:noCompletion public static function build(?isGlobal:Bool = false):Array<Field> {
 		var type = Context.getLocalType();
 		var fields = Context.getBuildFields();
 		
@@ -560,7 +560,10 @@ abstract Signal<T0, T1, T2>(Map<T0, KlasSignal<T1, T2>>) from Map<T0, KlasSignal
 	}
 	#end
 	
-	public static macro function getDependencies(key:String):Expr {
+	/**
+	 * Used internally by KlasImp.
+	 */
+	@:noCompletion public static macro function getDependencies(key:String):Expr {
 		var values = dependencyCache.get( key );
 		return values == null ? macro null : macro [$a { values }];
 	}
