@@ -6,6 +6,8 @@ import haxe.ds.StringMap;
 
 #if macro
 import sys.io.File;
+import msignal.Slot;
+import msignal.Signal;
 import sys.FileSystem;
 import sys.io.Process;
 import haxe.macro.Type;
@@ -20,6 +22,92 @@ using sys.FileSystem;
 using haxe.macro.TypeTools;
 using haxe.macro.ComplexTypeTools;
 using haxe.macro.MacroStringTools;
+
+class KlasSlot<T1, T2> extends Slot<KlasSignal<T1, T2>, T1->T2->T2> {
+	
+	public var param1:T1;
+	public var param2:T2;
+
+	public function new(signal:KlasSignal<T1, T2>, listener:T1->T2->T2, once:Bool = false, priority:Int = 0) {
+		super(signal, listener, once, priority);
+	}
+	
+	public function execute(value1:T1, value2:T2):Null<T2> {
+		if (!enabled) return null;
+		if (once) remove();
+		
+		if (param1 != null) value1 = param1;
+		if (param2 != null) value2 = param2;
+		
+		return listener(value1, value2);
+	}
+}
+
+class KlasSignal<T1, T2> extends Signal<KlasSlot<T1, T2>, T1->T2->T2> {
+	
+	public function new(?type1:Dynamic = null, ?type2:Dynamic = null) {
+		super([type1, type2]);
+	}
+	
+	public function dispatch(value1:T1, value2:T2):T2 {
+		var slotsToProcess = slots;
+		
+		while (slotsToProcess.nonEmpty) {
+			value2 = slotsToProcess.head.execute(value1, value2);
+			slotsToProcess = slotsToProcess.tail;
+			
+		}
+		
+		return value2;
+	}
+
+	override function createSlot(listener:T1->T2->T2, once:Bool = false, priority:Int = 0) {
+		return new KlasSlot<T1, T2>(this, listener, once, priority);
+	}
+}
+
+
+@:forward(keys, exists, iterator) 
+abstract NSSignal<T1, T2>(StringMap<KlasSignal<T1, T2>>) from StringMap<KlasSignal<T1, T2>> to StringMap<KlasSignal<T1, T2>> {
+	
+	public inline function new(u:StringMap<KlasSignal<T1, T2>>) this = u;
+	
+	public inline function add(metadata:String, callback:T1->T2->T2):KlasSlot<T1, T2> {
+		var signal = this.exists( metadata ) ? this.get( metadata ) : new KlasSignal();
+		return signal.add( callback );
+	}
+	
+	public inline function addOnce(metadata:String, callback:T1->T2->T2):KlasSlot<T1, T2> {
+		var signal = this.exists( metadata ) ? this.get( metadata ) : new KlasSignal();
+		return signal.addOnce( callback );
+	}
+	
+	public inline function addWithPriority(metadata:String, callback:T1->T2->T2, ?priority:Int = 0):KlasSlot<T1, T2> {
+		var signal = this.exists( metadata ) ? this.get( metadata ) : new KlasSignal();
+		return signal.addWithPriority( callback, priority );
+	}
+	
+	public inline function addOnceWithPriority(metadata:String, callback:T1->T2->T2, ?priority:Int = 0):KlasSlot<T1, T2> {
+		var signal = this.exists( metadata ) ? this.get( metadata ) : new KlasSignal();
+		return signal.addOnceWithPriority( callback, priority );
+	}
+	
+	public inline function remove(metadata:String, callback:T1->T2->T2):KlasSlot<T1, T2> {
+		var signal = this.exists( metadata ) ? this.get( metadata ) : new KlasSignal();
+		return signal.remove( callback );
+	}
+	
+	public inline function removeAll(metadata:String):Void {
+		if (this.exists( metadata )) this.get( metadata ).removeAll();
+	}
+	
+	public inline function dispatch(metadata:String, value1:T1, value2:T2):T2 {
+		if (this.exists( metadata )) value2 = this.get( metadata ).dispatch( value1, value2 );
+		return value2;
+	}
+	
+}
+
 #end
 
 /**
@@ -34,19 +122,22 @@ using haxe.macro.MacroStringTools;
 	
 	public static function initialize() {
 		if (isSetup == null || isSetup == false) {
+			// Initialize public hooks first.
+			once = new Signal0();
+			info = new StringMap();
+			rebuild = new StringMap();
+			inlineMetadata = new Map();
+			allMetadata = new KlasSignal();
+			classMetadata = new StringMap();
+			fieldMetadata = new StringMap();
+			
+			// Initialize internal variables
 			history = new StringMap();
 			dependencyCache = new StringMap();
-			DEFAULTS = new StringMap();
-			CLASS_META = new StringMap();
-			FIELD_META = new StringMap();
-			INLINE_META = new Map();
-			ONCE = [];
 			
-			RETYPE = new StringMap();
 			RETYPE_PENDING = new StringMap();
 			RETYPE_PREVIOUS = new StringMap();
 			
-			INFO = new StringMap();
 			INFO_PENDING = new StringMap();
 			
 			isSetup = true;
@@ -59,11 +150,11 @@ using haxe.macro.MacroStringTools;
 		Compiler.addGlobalMetadata( pathFilter, meta, recursive, toTypes, toFields );
 	}
 	
-	public static var DEFAULTS:StringMap<ClassType->Array<Field>->Array<Field>>;
-	public static var CLASS_META:StringMap<ClassType->Array<Field>->Array<Field>>;
-	public static var FIELD_META:StringMap<ClassType->Field->Field>;	
-	public static var INLINE_META:Map<EReg, ClassType->Field->Field>;
-	public static var ONCE:Array<Void->Void>;
+	public static var once:Signal0;
+	public static var allMetadata:KlasSignal<ClassType, Array<Field>>;
+	public static var classMetadata:NSSignal<ClassType, Array<Field>>;
+	public static var fieldMetadata:NSSignal<ClassType, Field>;	
+	public static var inlineMetadata:Map<EReg, ClassType->Field->Field>;
 	
 	/**
 	 * Simply holds a class path with a boolean value. If true, run the
@@ -75,7 +166,7 @@ using haxe.macro.MacroStringTools;
 	 * A list of metadata paired with a handler method returning a 
 	 * rebuilt class.
 	 */
-	public static var RETYPE:StringMap<ClassType->Array<Field>->Null<TypeDefinition>>;
+	public static var rebuild:StringMap<ClassType->Array<Field>->Null<TypeDefinition>>;
 	
 	/**
 	 * Holds a class path paired with its ClassType and Fields from the previous time
@@ -92,7 +183,7 @@ using haxe.macro.MacroStringTools;
 	 * A map of callbacks that are interested in information for a
 	 * perticular type.
 	 */
-	public static var INFO:StringMap<Array<Type->Array<Field>->Void>>;
+	public static var info:StringMap<Array<Type->Array<Field>->Void>>;
 	
 	/**
 	 * Holds paths, which are the key, with an array of callbacks
@@ -140,7 +231,7 @@ using haxe.macro.MacroStringTools;
 	private static function processHistory():Void {
 		var _history = null;
 		
-		for (key in INFO.keys()) if (history.exists( key )) {
+		for (key in info.keys()) if (history.exists( key )) {
 			_history = history.get( key );
 			
 			// Process any pending calls.
@@ -153,10 +244,10 @@ using haxe.macro.MacroStringTools;
 				
 			}
 			
-			for (cb in INFO.get( key )) cb( _history.type, _history.fields );
+			for (cb in info.get( key )) cb( _history.type, _history.fields );
 			
 			// All callbacks have been called, clear from the map.
-			INFO.remove( key );
+			info.remove( key );
 		}
 	}
 	
@@ -194,7 +285,7 @@ using haxe.macro.MacroStringTools;
 	 * The main build method which passes Classes and their fields
 	 * to other build macros.
 	 */
-	public static function build(?isGlobal:Bool = false):Array<Field> {
+	@:access(msignal.Signal) public static function build(?isGlobal:Bool = false):Array<Field> {
 		var type = Context.getLocalType();
 		var fields = Context.getBuildFields();
 		
@@ -219,9 +310,10 @@ using haxe.macro.MacroStringTools;
 		
 		if (cls.meta.has(':KLAS_SKIP')) return fields;
 		
-		// Call all callbacks.
-		for (once in ONCE) once();
-		ONCE = [];
+		// Run all callbacks registered with `once`.
+		once.dispatch();
+		// Remove all callbacks in case the user didnt use `addOnce*`.
+		once.removeAll();
 		
 		/**
 		 * Loop through any class metadata and pass along 
@@ -231,13 +323,14 @@ using haxe.macro.MacroStringTools;
 		 * while in IDE display mode, `-D display`.
 		 */
 		
-		log( 'CLASS_META :: ' + [for (key in CLASS_META.keys()) key] );
+		log( 'CLASS_META :: ' + [for (key in classMetadata.keys()) key] );
 		
-		for (key in CLASS_META.keys()) if (cls.meta.has( key )) {
-			fields = CLASS_META.get( key )( cls, fields );
+		for (key in classMetadata.keys()) if (cls.meta.has( key )) {
+			fields = classMetadata.dispatch( key, cls, fields );
+			
 		}
 		
-		log( 'FIELD_META :: ' + [for (key in FIELD_META.keys()) key] );
+		log( 'FIELD_META :: ' + [for (key in fieldMetadata.keys()) key] );
 		
 		for (i in 0...fields.length) {
 			
@@ -245,31 +338,29 @@ using haxe.macro.MacroStringTools;
 			
 			// First check the field's metadata for matches. 
 			// Passing along the class and matched field.
-			for (key in FIELD_META.keys()) if (field.meta != null && field.meta.exists( function(m) return m.name == key )) {
-				field = FIELD_META.get( key )( cls, field );
+			for (key in fieldMetadata.keys()) if (field.meta != null && field.meta.exists( function(m) return m.name == key )) {
+				//field = fieldMetadata.get( key )( cls, field );
+				field = fieldMetadata.dispatch( key, cls, field );
+				
 			}
 			
 			var printed = printer.printField( field );
 			//trace( printed );
 			// Now check the stringified field for matching inline metadata.
 			// Passing along the class and matched field.
-			for (key in INLINE_META.keys()) if (key.match( printed )) {
-				field = INLINE_META.get( key )( cls, field );
+			for (key in inlineMetadata.keys()) if (key.match( printed )) {
+				field = inlineMetadata.get( key )( cls, field );
 			}
 			
 			fields[i] = field;
 			
 		}
 		
-		log( 'DEFAULTS :: ' + [for (key in DEFAULTS.keys()) key] );
+		fields = allMetadata.dispatch(cls, fields);
 		
-		for (def in DEFAULTS) {
-			fields = def( cls, fields );
-		}
+		log( 'RETYPE :: ' + [for (key in rebuild.keys()) key] );
 		
-		log( 'RETYPE :: ' + [for (key in RETYPE.keys()) key] );
-		
-		for (key in RETYPE.keys()) if (cls.meta.has( key )) {
+		for (key in rebuild.keys()) if (cls.meta.has( key )) {
 			// Build the cache.
 			if (!RETYPE_PREVIOUS.exists( cls.pack.toDotPath( cls.name ) )) {
 				RETYPE_PREVIOUS.set( cls.pack.toDotPath( cls.name ), { cls:cls, name:cls.pack.toDotPath( cls.name ), fields:fields } );
@@ -295,7 +386,7 @@ using haxe.macro.MacroStringTools;
 	public static function retype(path:String, metadata:String, ?cls:ClassType, ?fields:Array<Field>):Null<String> {
 		var result = null;
 		
-		if (RETYPE.exists( metadata ) && RETYPE_PREVIOUS.exists( path )) {
+		if (rebuild.exists( metadata ) && RETYPE_PREVIOUS.exists( path )) {
 			// Fetch the previous class and fields.
 			var prev = RETYPE_PREVIOUS.get( path );
 			
@@ -306,7 +397,7 @@ using haxe.macro.MacroStringTools;
 			
 			if (cls != null && fields != null) {
 				// Pass `cls` and `fields` to the retype handler to get a `typedefinition` back.
-				var td = RETYPE.get( metadata )( cls, fields );
+				var td = rebuild.get( metadata )( cls, fields );
 				
 				if (td == null) return result;
 				
