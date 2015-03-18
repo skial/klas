@@ -151,9 +151,28 @@ abstract Signal<T0, T1, T2>(Map<T0, KlasSignal<T1, T2>>) from Map<T0, KlasSignal
 	}
 	
 	public static var once:Signal0;
+	
+	/**
+	 * A callback which will be run on every class encountered.
+	 */
 	public static var allMetadata:KlasSignal<ClassType, Array<Field>>;
+	
+	/**
+	 * A callback which will be run only when the specified metadata
+	 * has been found on a class.
+	 */
 	public static var classMetadata:Signal<String, ClassType, Array<Field>>;
+	
+	/**
+	 * A callback which will be run only when the specified metadata
+	 * has been found on a field.
+	 */
 	public static var fieldMetadata:Signal<String, ClassType, Field>;
+	
+	/**
+	 * A callback which will be run only when a field has inline
+	 * metadata matching the regular expression.
+	 */
 	public static var inlineMetadata:Signal<EReg, ClassType, Field>;
 	
 	/**
