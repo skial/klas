@@ -118,7 +118,7 @@ abstract Signal<T0, T1, T2>(Map<T0, KlasSignal<T1, T2>>) from Map<T0, KlasSignal
 @:KLAS_SKIP class KlasImp {
 	
 	#if macro
-	public static var isSetup:Bool = false;
+	private static var isSetup:Bool = false;
 	
 	public static function initialize() {
 		if (isSetup == null || isSetup == false) {
@@ -133,16 +133,16 @@ abstract Signal<T0, T1, T2>(Map<T0, KlasSignal<T1, T2>>) from Map<T0, KlasSignal
 			
 			// Initialize internal variables
 			history = new StringMap();
-			dependencyCache = new StringMap();
+			pendingInfo = new StringMap();
 			
 			pendingRebuild = new StringMap();
 			rebuildCache = new StringMap();
 			
-			pendingInfo = new StringMap();
-			
-			isSetup = true;
+			dependencyCache = new StringMap();
 			
 			Context.onGenerate( KlasImp.onGenerate );
+			
+			isSetup = true;
 		}
 	}
 	
@@ -192,10 +192,9 @@ abstract Signal<T0, T1, T2>(Map<T0, KlasSignal<T1, T2>>) from Map<T0, KlasSignal
 	 */
 	public static var rebuildCache:StringMap<{ name:String, cls:ClassType, fields:Array<Field> }>;
 	
-	
 	/**
-	 * Simply holds a class path with a boolean value. If true, run the
-	 * handler in `RETYPE` if it has a matching metadata.
+	 * Holds a class path with a boolean value. If true, run the
+	 * handler in `rebuild` if it has a matching metadata.
 	 */
 	public static var pendingRebuild:StringMap<Bool>;
 	
