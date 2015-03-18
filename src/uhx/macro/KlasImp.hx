@@ -43,7 +43,7 @@ class KlasSlot<T1, T2> extends Slot<KlasSignal<T1, T2>, T1->T2->T2> {
 	}
 }
 
-class KlasSignal<T1, T2> extends Signal<KlasSlot<T1, T2>, T1->T2->T2> {
+class KlasSignal<T1, T2> extends msignal.Signal<KlasSlot<T1, T2>, T1->T2->T2> {
 	
 	public function new(?type1:Dynamic = null, ?type2:Dynamic = null) {
 		super([type1, type2]);
@@ -68,40 +68,40 @@ class KlasSignal<T1, T2> extends Signal<KlasSlot<T1, T2>, T1->T2->T2> {
 
 
 @:forward(keys, exists, iterator) 
-abstract NSSignal<T1, T2>(StringMap<KlasSignal<T1, T2>>) from StringMap<KlasSignal<T1, T2>> to StringMap<KlasSignal<T1, T2>> {
+abstract Signal<T0, T1, T2>(Map<T0, KlasSignal<T1, T2>>) from Map<T0, KlasSignal<T1, T2>> to Map<T0, KlasSignal<T1, T2>> {
 	
-	public inline function new(u:StringMap<KlasSignal<T1, T2>>) this = u;
+	public inline function new(u:Map<T0, KlasSignal<T1, T2>>) this = u;
 	
-	public inline function add(metadata:String, callback:T1->T2->T2):KlasSlot<T1, T2> {
+	public inline function add(metadata:T0, callback:T1->T2->T2):KlasSlot<T1, T2> {
 		var signal = this.exists( metadata ) ? this.get( metadata ) : new KlasSignal();
 		return signal.add( callback );
 	}
 	
-	public inline function addOnce(metadata:String, callback:T1->T2->T2):KlasSlot<T1, T2> {
+	public inline function addOnce(metadata:T0, callback:T1->T2->T2):KlasSlot<T1, T2> {
 		var signal = this.exists( metadata ) ? this.get( metadata ) : new KlasSignal();
 		return signal.addOnce( callback );
 	}
 	
-	public inline function addWithPriority(metadata:String, callback:T1->T2->T2, ?priority:Int = 0):KlasSlot<T1, T2> {
+	public inline function addWithPriority(metadata:T0, callback:T1->T2->T2, ?priority:Int = 0):KlasSlot<T1, T2> {
 		var signal = this.exists( metadata ) ? this.get( metadata ) : new KlasSignal();
 		return signal.addWithPriority( callback, priority );
 	}
 	
-	public inline function addOnceWithPriority(metadata:String, callback:T1->T2->T2, ?priority:Int = 0):KlasSlot<T1, T2> {
+	public inline function addOnceWithPriority(metadata:T0, callback:T1->T2->T2, ?priority:Int = 0):KlasSlot<T1, T2> {
 		var signal = this.exists( metadata ) ? this.get( metadata ) : new KlasSignal();
 		return signal.addOnceWithPriority( callback, priority );
 	}
 	
-	public inline function remove(metadata:String, callback:T1->T2->T2):KlasSlot<T1, T2> {
+	public inline function remove(metadata:T0, callback:T1->T2->T2):KlasSlot<T1, T2> {
 		var signal = this.exists( metadata ) ? this.get( metadata ) : new KlasSignal();
 		return signal.remove( callback );
 	}
 	
-	public inline function removeAll(metadata:String):Void {
+	public inline function removeAll(metadata:T0):Void {
 		if (this.exists( metadata )) this.get( metadata ).removeAll();
 	}
 	
-	public inline function dispatch(metadata:String, value1:T1, value2:T2):T2 {
+	public inline function dispatch(metadata:T0, value1:T1, value2:T2):T2 {
 		if (this.exists( metadata )) value2 = this.get( metadata ).dispatch( value1, value2 );
 		return value2;
 	}
@@ -152,9 +152,9 @@ abstract NSSignal<T1, T2>(StringMap<KlasSignal<T1, T2>>) from StringMap<KlasSign
 	
 	public static var once:Signal0;
 	public static var allMetadata:KlasSignal<ClassType, Array<Field>>;
-	public static var classMetadata:NSSignal<ClassType, Array<Field>>;
-	public static var fieldMetadata:NSSignal<ClassType, Field>;	
-	public static var inlineMetadata:Map<EReg, ClassType->Field->Field>;
+	public static var classMetadata:Signal<String, ClassType, Array<Field>>;
+	public static var fieldMetadata:Signal<String, ClassType, Field>;
+	public static var inlineMetadata:Signal<EReg, ClassType, Field>;
 	
 	/**
 	 * Simply holds a class path with a boolean value. If true, run the
@@ -349,7 +349,8 @@ abstract NSSignal<T1, T2>(StringMap<KlasSignal<T1, T2>>) from StringMap<KlasSign
 			// Now check the stringified field for matching inline metadata.
 			// Passing along the class and matched field.
 			for (key in inlineMetadata.keys()) if (key.match( printed )) {
-				field = inlineMetadata.get( key )( cls, field );
+				//field = inlineMetadata.get( key )( cls, field );
+				field = inlineMetadata.dispatch( key, cls, field );
 			}
 			
 			fields[i] = field;
