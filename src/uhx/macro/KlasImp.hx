@@ -135,10 +135,10 @@ abstract Signal<T0, T1, T2>(Map<T0, KlasSignal<T1, T2>>) from Map<T0, KlasSignal
 			history = new StringMap();
 			dependencyCache = new StringMap();
 			
-			RETYPE_PENDING = new StringMap();
-			RETYPE_PREVIOUS = new StringMap();
+			pendingRebuild = new StringMap();
+			rebuildCache = new StringMap();
 			
-			INFO_PENDING = new StringMap();
+			pendingInfo = new StringMap();
 			
 			isSetup = true;
 			
@@ -157,10 +157,9 @@ abstract Signal<T0, T1, T2>(Map<T0, KlasSignal<T1, T2>>) from Map<T0, KlasSignal
 	public static var inlineMetadata:Signal<EReg, ClassType, Field>;
 	
 	/**
-	 * Simply holds a class path with a boolean value. If true, run the
-	 * handler in `RETYPE` if it has a matching metadata.
+	 * A simple counter used in the naming of new `TypeDefinition`.
 	 */
-	public static var RETYPE_PENDING:StringMap<Bool>;
+	private static var counter:Int = 0;
 	
 	/**
 	 * A list of metadata paired with a handler method returning a 
@@ -172,12 +171,14 @@ abstract Signal<T0, T1, T2>(Map<T0, KlasSignal<T1, T2>>) from Map<T0, KlasSignal
 	 * Holds a class path paired with its ClassType and Fields from the previous time
 	 * it was encountered.
 	 */
-	public static var RETYPE_PREVIOUS:StringMap<{ name:String, cls:ClassType, fields:Array<Field> }>;
+	public static var rebuildCache:StringMap<{ name:String, cls:ClassType, fields:Array<Field> }>;
+	
 	
 	/**
-	 * A simple counter used in the naming of new `TypeDefinition`.
+	 * Simply holds a class path with a boolean value. If true, run the
+	 * handler in `RETYPE` if it has a matching metadata.
 	 */
-	private static var RETYPE_COUNTER:Int = 0;
+	public static var pendingRebuild:StringMap<Bool>;
 	
 	/**
 	 * A map of callbacks that are interested in information for a
@@ -190,7 +191,7 @@ abstract Signal<T0, T1, T2>(Map<T0, KlasSignal<T1, T2>>) from Map<T0, KlasSignal
 	 * wanting to inspect `Type` and `Array<Field>`. You should not
 	 * modify any of the `Field`.
 	 */
-	public static var INFO_PENDING:StringMap<Array<Type->Array<Field>->Void>>;
+	public static var pendingInfo:StringMap<Array<Type->Array<Field>->Void>>;
 	
 	/**
 	 * Used to turn `Expr` and `TypeDefinition` into readable Haxe code.
@@ -235,12 +236,12 @@ abstract Signal<T0, T1, T2>(Map<T0, KlasSignal<T1, T2>>) from Map<T0, KlasSignal
 			_history = history.get( key );
 			
 			// Process any pending calls.
-			if (INFO_PENDING.exists( key )) {
-				for (cb in INFO_PENDING.get( key )) {
+			if (pendingInfo.exists( key )) {
+				for (cb in pendingInfo.get( key )) {
 					cb( _history.type, _history.fields );
 				}
 				
-				INFO_PENDING.remove( key );
+				pendingInfo.remove( key );
 				
 			}
 			
@@ -285,7 +286,7 @@ abstract Signal<T0, T1, T2>(Map<T0, KlasSignal<T1, T2>>) from Map<T0, KlasSignal
 	 * The main build method which passes Classes and their fields
 	 * to other build macros.
 	 */
-	@:access(msignal.Signal) public static function build(?isGlobal:Bool = false):Array<Field> {
+	public static function build(?isGlobal:Bool = false):Array<Field> {
 		var type = Context.getLocalType();
 		var fields = Context.getBuildFields();
 		
@@ -363,15 +364,15 @@ abstract Signal<T0, T1, T2>(Map<T0, KlasSignal<T1, T2>>) from Map<T0, KlasSignal
 		
 		for (key in rebuild.keys()) if (cls.meta.has( key )) {
 			// Build the cache.
-			if (!RETYPE_PREVIOUS.exists( cls.pack.toDotPath( cls.name ) )) {
-				RETYPE_PREVIOUS.set( cls.pack.toDotPath( cls.name ), { cls:cls, name:cls.pack.toDotPath( cls.name ), fields:fields } );
+			if (!rebuildCache.exists( cls.pack.toDotPath( cls.name ) )) {
+				rebuildCache.set( cls.pack.toDotPath( cls.name ), { cls:cls, name:cls.pack.toDotPath( cls.name ), fields:fields } );
 				
 			}
 			
 			// Run any pending calls to `KlasImp.retype`.
-			if (RETYPE_PENDING.exists( cls.pack.toDotPath( cls.name ) ) && RETYPE_PENDING.get( cls.pack.toDotPath( cls.name ) )) {
+			if (pendingRebuild.exists( cls.pack.toDotPath( cls.name ) ) && pendingRebuild.get( cls.pack.toDotPath( cls.name ) )) {
 				retype( cls.pack.toDotPath( cls.name ), key, cls, fields );
-				RETYPE_PENDING.set( cls.pack.toDotPath( cls.name ), false );
+				pendingRebuild.set( cls.pack.toDotPath( cls.name ), false );
 				
 			}
 			
@@ -387,9 +388,9 @@ abstract Signal<T0, T1, T2>(Map<T0, KlasSignal<T1, T2>>) from Map<T0, KlasSignal
 	public static function retype(path:String, metadata:String, ?cls:ClassType, ?fields:Array<Field>):Null<String> {
 		var result = null;
 		
-		if (rebuild.exists( metadata ) && RETYPE_PREVIOUS.exists( path )) {
+		if (rebuild.exists( metadata ) && rebuildCache.exists( path )) {
 			// Fetch the previous class and fields.
-			var prev = RETYPE_PREVIOUS.get( path );
+			var prev = rebuildCache.get( path );
 			
 			// Set `cls` and `fields` only if the cache exists.
 			if (cls == null && prev != null) cls = prev.cls;
@@ -412,7 +413,7 @@ abstract Signal<T0, T1, T2>(Map<T0, KlasSignal<T1, T2>>) from Map<T0, KlasSignal
 				
 				// If the TypeDefinition::name is the same as `cls.name`, modify it.
 				if (td.pack.toDotPath( td.name ) == cls.pack.toDotPath( cls.name ) || td.pack.toDotPath( td.name ) == prev.name) {
-					td.name += ('' + Date.now().getTime() + '' + (RETYPE_COUNTER++)).replace('+', '_').replace('.', '_');
+					td.name += ('' + Date.now().getTime() + '' + (counter++)).replace('+', '_').replace('.', '_');
 					
 				}
 				
@@ -427,13 +428,13 @@ abstract Signal<T0, T1, T2>(Map<T0, KlasSignal<T1, T2>>) from Map<T0, KlasSignal
 				prev.fields = td.fields;
 				prev.name = td.pack.toDotPath( td.name );
 				
-				RETYPE_PREVIOUS.set( path, prev );
+				rebuildCache.set( path, prev );
 				
 			}
 			
 		} else {
-			RETYPE_PENDING.set( path, true );
-			if (cls != null && fields != null) RETYPE_PREVIOUS.set( path, { cls:cls, name:cls.pack.toDotPath( cls.name ), fields:fields } );
+			pendingRebuild.set( path, true );
+			if (cls != null && fields != null) rebuildCache.set( path, { cls:cls, name:cls.pack.toDotPath( cls.name ), fields:fields } );
 			
 		}
 		
@@ -453,12 +454,12 @@ abstract Signal<T0, T1, T2>(Map<T0, KlasSignal<T1, T2>>) from Map<T0, KlasSignal
 			_history = history.get( path );
 			
 			// Process any pending calls.
-			if (INFO_PENDING.exists( path )) {
-				for (cb in INFO_PENDING.get( path )) {
+			if (pendingInfo.exists( path )) {
+				for (cb in pendingInfo.get( path )) {
 					cb( _history.type, _history.fields );
 				}
 				
-				INFO_PENDING.remove( path );
+				pendingInfo.remove( path );
 				
 			}
 			
@@ -466,10 +467,10 @@ abstract Signal<T0, T1, T2>(Map<T0, KlasSignal<T1, T2>>) from Map<T0, KlasSignal
 			result = true;
 			
 		} else {
-			var callbacks = INFO_PENDING.exists( path ) ? INFO_PENDING.get( path ) : [];
+			var callbacks = pendingInfo.exists( path ) ? pendingInfo.get( path ) : [];
 			callbacks.push( callback );
 			
-			INFO_PENDING.set( path, callbacks );
+			pendingInfo.set( path, callbacks );
 			
 		}
 		
