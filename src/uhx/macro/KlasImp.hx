@@ -190,13 +190,13 @@ abstract Signal<T0, T1, T2>(Map<T0, KlasSignal<T1, T2>>) from Map<T0, KlasSignal
 	 * Holds a class path paired with its ClassType and Fields from the previous time
 	 * it was encountered.
 	 */
-	public static var rebuildCache:StringMap<{ name:String, cls:ClassType, fields:Array<Field> }>;
+	private static var rebuildCache:StringMap<{ name:String, cls:ClassType, fields:Array<Field> }>;
 	
 	/**
 	 * Holds a class path with a boolean value. If true, run the
 	 * handler in `rebuild` if it has a matching metadata.
 	 */
-	public static var pendingRebuild:StringMap<Bool>;
+	private static var pendingRebuild:StringMap<Bool>;
 	
 	/**
 	 * A map of callbacks that are interested in information for a
@@ -209,7 +209,7 @@ abstract Signal<T0, T1, T2>(Map<T0, KlasSignal<T1, T2>>) from Map<T0, KlasSignal
 	 * wanting to inspect `Type` and `Array<Field>`. You should not
 	 * modify any of the `Field`.
 	 */
-	public static var pendingInfo:StringMap<Array<Type->Array<Field>->Void>>;
+	private static var pendingInfo:StringMap<Array<Type->Array<Field>->Void>>;
 	
 	/**
 	 * Used to turn `Expr` and `TypeDefinition` into readable Haxe code.
