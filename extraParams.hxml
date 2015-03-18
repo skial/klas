@@ -1,1 +1,2 @@
 --macro uhx.macro.KlasImp.addGlobalMetadata("", "@:build(uhx.macro.KlasImp.inspection())", true, true, false)
+--macro uhx.macro.KlasImp.addGlobalMetadata("", "@:build(uhx.macro.KlasImp.dependency())", true, true, false)

@@ -1,13 +1,15 @@
 package uhx.macro;
 
 import haxe.Json;
+import Type in StdType;
+import haxe.ds.StringMap;
+
+#if macro
 import sys.io.File;
 import sys.FileSystem;
 import sys.io.Process;
-import Type in StdType;
 import haxe.macro.Type;
 import haxe.macro.Expr;
-import haxe.ds.StringMap;
 import haxe.macro.Context;
 import haxe.macro.Printer;
 import haxe.macro.Compiler;
@@ -18,6 +20,7 @@ using sys.FileSystem;
 using haxe.macro.TypeTools;
 using haxe.macro.ComplexTypeTools;
 using haxe.macro.MacroStringTools;
+#end
 
 /**
  * ...
@@ -26,11 +29,13 @@ using haxe.macro.MacroStringTools;
 
 @:KLAS_SKIP class KlasImp {
 	
+	#if macro
 	public static var isSetup:Bool = false;
 	
 	public static function initialize() {
 		if (isSetup == null || isSetup == false) {
 			history = new StringMap();
+			dependencyCache = new StringMap();
 			DEFAULTS = new StringMap();
 			CLASS_META = new StringMap();
 			FIELD_META = new StringMap();
@@ -45,6 +50,8 @@ using haxe.macro.MacroStringTools;
 			INFO_PENDING = new StringMap();
 			
 			isSetup = true;
+			
+			Context.onGenerate( KlasImp.onGenerate );
 		}
 	}
 	
@@ -105,6 +112,8 @@ using haxe.macro.MacroStringTools;
 	 */
 	private static var history:StringMap<{ type:Type, fields:Array<Field> }>;
 	
+	private static var dependencyCache:StringMap<Array<Expr>>;
+	
 	/**
 	 * Called by KlasImp's `extraParams.hxml` file for globally applied
 	 * metadata.
@@ -149,6 +158,36 @@ using haxe.macro.MacroStringTools;
 			// All callbacks have been called, clear from the map.
 			INFO.remove( key );
 		}
+	}
+	
+	public static function dependency():Array<Field> {
+		var type = Context.getLocalType();
+		var fields = Context.getBuildFields();
+		var key = type.toString();
+		var cls = null;
+		initialize();
+		
+		switch (type) {
+			case TInst(r, _) if (r != null):
+				var cls = r.get();
+				
+				if (!cls.isInterface && !cls.isExtern && !cls.meta.has(':coreApi') && !cls.meta.has(':coreType') && !cls.meta.has(':KLAS_SKIP')) {
+					if (!fields.exists( function(f) return f.name == '__klasDependencies__' )) {
+						
+						fields = fields.concat( (macro class Temp {
+							@:skip @:ignore @:noCompletion @:noDebug @:noDoc 
+							public static var __klasDependencies__:Array<Class<Dynamic>> = uhx.macro.KlasImp.getDependencies( $v { key } );
+						}).fields );
+						
+					}
+					
+				}
+				
+			case _:
+				
+		}
+		
+		return fields;
 	}
 	
 	/**
@@ -253,8 +292,8 @@ using haxe.macro.MacroStringTools;
 	 * Starts the process of rebuilding a Class and its fields. Returns `true`
 	 * is the rebuilt was a success, `false` otherwise.
 	 */
-	public static function retype(path:String, metadata:String, ?cls:ClassType, ?fields:Array<Field>):Bool {
-		var result = false;
+	public static function retype(path:String, metadata:String, ?cls:ClassType, ?fields:Array<Field>):Null<String> {
+		var result = null;
 		
 		if (RETYPE.exists( metadata ) && RETYPE_PREVIOUS.exists( path )) {
 			// Fetch the previous class and fields.
@@ -269,7 +308,7 @@ using haxe.macro.MacroStringTools;
 				// Pass `cls` and `fields` to the retype handler to get a `typedefinition` back.
 				var td = RETYPE.get( metadata )( cls, fields );
 				
-				if (td == null) return false;
+				if (td == null) return result;
 				
 				var nativeF = metadataFilter.bind(_, ':native', cls.pack.toDotPath( cls.name ));
 				
@@ -285,6 +324,8 @@ using haxe.macro.MacroStringTools;
 					
 				}
 				
+				result = td.pack.toDotPath( td.name );
+				
 				// Remove the previous class for the the current compile.
 				Compiler.exclude( prev.name );
 				// Add the "retyped" class into the current compile.
@@ -295,8 +336,6 @@ using haxe.macro.MacroStringTools;
 				prev.name = td.pack.toDotPath( td.name );
 				
 				RETYPE_PREVIOUS.set( path, prev );
-				
-				result = true;
 				
 			}
 			
@@ -345,6 +384,44 @@ using haxe.macro.MacroStringTools;
 		return result;
 	}
 	
+	/**
+	 * Generate `a` before `b`.
+	 */
+	public static function generateBefore(a:ComplexType, b:ComplexType):Void {
+		switch ([a, b]) {
+			case [TPath(_a), TPath(_b)]:
+				var aname = _a.pack.toDotPath( _a.name );
+				var bname = _b.pack.toDotPath( _b.name );
+				
+				var values = dependencyCache.exists( bname ) ? dependencyCache.get( bname ) : [];
+				values.push( macro $p { _a.pack.concat( [_a.name] ) } );
+				
+				dependencyCache.set( bname, values );
+				
+			case _:
+				
+		}
+	}
+	
+	/**
+	 * Generate `a` after `b`.
+	 */
+	public static function generateAfter(a:ComplexType, b:ComplexType):Void {
+		switch ([a, b]) {
+			case [TPath(_a), TPath(_b)]:
+				var aname = _a.pack.toDotPath( _a.name );
+				var bname = _b.pack.toDotPath( _b.name );
+				
+				var values = dependencyCache.exists( aname ) ? dependencyCache.get( aname ) : [];
+				values.push( macro $p { _b.pack.concat( [_b.name] ) } );
+				
+				dependencyCache.set( aname, values );
+				
+			case _:
+				
+		}
+	}
+	
 	private static function metadataFilter(meta:MetadataEntry, tag:String, pack:String):Bool {
 		return meta.name == tag && printer.printExprs( meta.params, '.' ).indexOf( pack ) > -1;
 	}
@@ -353,6 +430,28 @@ using haxe.macro.MacroStringTools;
 		#if klas_verbose
 		Sys.println( value );
 		#end
+	}
+	
+	private static function onGenerate(types:Array<Type>):Void {
+		for (type in types) {
+			// Prevent `__klasDependencies__` being included in the output.
+			switch (type) {
+				case TInst(r, p) if (r != null):
+					for (field in r.get().statics.get()) if (field.name == '__klasDependencies__') {
+						//field.meta.add( ':extern', [], field.pos );
+						
+					}
+					
+				case _:
+					
+			}
+		}
+	}
+	#end
+	
+	public static macro function getDependencies(key:String):Expr {
+		var values = dependencyCache.get( key );
+		return values == null ? macro null : macro [$a { values }];
 	}
 	
 }
