@@ -81,27 +81,72 @@ abstract Signal<T0, T1, T2>(Map<T0, KlasSignal<T1, T2>>) from Map<T0, KlasSignal
 	public inline function new(u:Map<T0, KlasSignal<T1, T2>>) this = u;
 	
 	public inline function add(metadata:T0, callback:T1->T2->T2):KlasSlot<T1, T2> {
-		var signal = this.exists( metadata ) ? this.get( metadata ) : new KlasSignal();
+		var signal = null;
+		
+		if (this.exists( metadata )) {
+			signal = this.get( metadata );
+		} else {
+			signal = new KlasSignal();
+			this.set( metadata, signal );
+			
+		}
+		
 		return signal.add( callback );
 	}
 	
 	public inline function addOnce(metadata:T0, callback:T1->T2->T2):KlasSlot<T1, T2> {
-		var signal = this.exists( metadata ) ? this.get( metadata ) : new KlasSignal();
+		var signal = null;
+		
+		if (this.exists( metadata )) {
+			signal = this.get( metadata );
+		} else {
+			signal = new KlasSignal();
+			this.set( metadata, signal );
+			
+		}
+		
 		return signal.addOnce( callback );
 	}
 	
 	public inline function addWithPriority(metadata:T0, callback:T1->T2->T2, ?priority:Int = 0):KlasSlot<T1, T2> {
-		var signal = this.exists( metadata ) ? this.get( metadata ) : new KlasSignal();
+		var signal = null;
+		
+		if (this.exists( metadata )) {
+			signal = this.get( metadata );
+		} else {
+			signal = new KlasSignal();
+			this.set( metadata, signal );
+			
+		}
+		
 		return signal.addWithPriority( callback, priority );
 	}
 	
 	public inline function addOnceWithPriority(metadata:T0, callback:T1->T2->T2, ?priority:Int = 0):KlasSlot<T1, T2> {
-		var signal = this.exists( metadata ) ? this.get( metadata ) : new KlasSignal();
+		var signal = null;
+		
+		if (this.exists( metadata )) {
+			signal = this.get( metadata );
+		} else {
+			signal = new KlasSignal();
+			this.set( metadata, signal );
+			
+		}
+		
 		return signal.addOnceWithPriority( callback, priority );
 	}
 	
 	public inline function remove(metadata:T0, callback:T1->T2->T2):KlasSlot<T1, T2> {
-		var signal = this.exists( metadata ) ? this.get( metadata ) : new KlasSignal();
+		var signal = null;
+		
+		if (this.exists( metadata )) {
+			signal = this.get( metadata );
+		} else {
+			signal = new KlasSignal();
+			this.set( metadata, signal );
+			
+		}
+		
 		return signal.remove( callback );
 	}
 	
@@ -147,6 +192,8 @@ abstract Signal<T0, T1, T2>(Map<T0, KlasSignal<T1, T2>>) from Map<T0, KlasSignal
 			rebuildCache = new StringMap();
 			
 			dependencyCache = new StringMap();
+			
+			onRebuild = new Signal1();
 			
 			Context.onGenerate( KlasImp.onGenerate );
 			
