@@ -198,6 +198,8 @@ abstract Signal<T0, T1, T2>(Map<T0, KlasSignal<T1, T2>>) from Map<T0, KlasSignal
 	 */
 	private static var pendingRebuild:StringMap<Bool>;
 	
+	public static var onRebuild:Signal1<String>;
+	
 	/**
 	 * A map of callbacks that are interested in information for a
 	 * perticular type.
@@ -241,7 +243,7 @@ abstract Signal<T0, T1, T2>(Map<T0, KlasSignal<T1, T2>>) from Map<T0, KlasSignal
 		
 		processHistory();
 		
-		return fields;
+		return Context.getBuildFields();
 	}
 	
 	/**
@@ -378,7 +380,7 @@ abstract Signal<T0, T1, T2>(Map<T0, KlasSignal<T1, T2>>) from Map<T0, KlasSignal
 		
 		fields = allMetadata.dispatch(cls, fields);
 		
-		log( 'RETYPE :: ' + [for (key in rebuild.keys()) key] );
+		log( 'REBUILD :: ' + [for (key in rebuild.keys()) key] );
 		
 		for (key in rebuild.keys()) if (cls.meta.has( key )) {
 			// Build the cache.
@@ -389,7 +391,7 @@ abstract Signal<T0, T1, T2>(Map<T0, KlasSignal<T1, T2>>) from Map<T0, KlasSignal
 			
 			// Run any pending calls to `KlasImp.retype`.
 			if (pendingRebuild.exists( cls.pack.toDotPath( cls.name ) ) && pendingRebuild.get( cls.pack.toDotPath( cls.name ) )) {
-				retype( cls.pack.toDotPath( cls.name ), key, cls, fields );
+				triggerRebuild( cls.pack.toDotPath( cls.name ), key, cls, fields );
 				pendingRebuild.set( cls.pack.toDotPath( cls.name ), false );
 				
 			}
@@ -401,19 +403,20 @@ abstract Signal<T0, T1, T2>(Map<T0, KlasSignal<T1, T2>>) from Map<T0, KlasSignal
 	
 	/**
 	 * Starts the process of rebuilding a Class and its fields. Returns `true`
-	 * is the rebuilt was a success, `false` otherwise.
+	 * if the rebuilt type was successfull, `false` otherwise.
 	 */
-	public static function retype(path:String, metadata:String, ?cls:ClassType, ?fields:Array<Field>):Null<String> {
+	public static function triggerRebuild(path:String, metadata:String, ?cls:ClassType, ?fields:Array<Field>):Null<String> {
 		var result = null;
 		
 		if (rebuild.exists( metadata ) && rebuildCache.exists( path )) {
 			// Fetch the previous class and fields.
-			var prev = rebuildCache.get( path );
+			var previous = rebuildCache.get( path );
+			var clsName = cls.pack.toDotPath( cls.name );
 			
 			// Set `cls` and `fields` only if the cache exists.
-			if (cls == null && prev != null) cls = prev.cls;
-			if (fields == null && prev != null) fields = prev.fields;
-			if (prev.name == null || prev.name == '') prev.name = cls.pack.toDotPath( cls.name );
+			if (cls == null && previous != null) cls = previous.cls;
+			if (fields == null && previous != null) fields = previous.fields;
+			if (previous.name == null || previous.name == '') previous.name = clsName;
 			
 			if (cls != null && fields != null) {
 				// Pass `cls` and `fields` to the retype handler to get a `typedefinition` back.
@@ -421,32 +424,33 @@ abstract Signal<T0, T1, T2>(Map<T0, KlasSignal<T1, T2>>) from Map<T0, KlasSignal
 				
 				if (td == null) return result;
 				
-				var nativeF = metadataFilter.bind(_, ':native', cls.pack.toDotPath( cls.name ));
+				var tdName = td.pack.toDotPath( td.name );
+				var nativeF = metadataFilter.bind(_, ':native', clsName);
 				
 				// Check if `@:native('path.to.Class')` exists. Remove any found.
 				if (td.meta != null && td.meta.exists( nativeF )) for (m in td.meta.filter( nativeF )) td.meta.remove( m );
 				
 				// Add `@:native` and use the original package and type name.
-				td.meta.push( { name:':native', params:[macro $v { cls.pack.toDotPath( cls.name ) } ], pos:cls.pos } );
+				td.meta.push( { name:':native', params:[macro $v { clsName } ], pos:cls.pos } );
 				
 				// If the TypeDefinition::name is the same as `cls.name`, modify it.
-				if (td.pack.toDotPath( td.name ) == cls.pack.toDotPath( cls.name ) || td.pack.toDotPath( td.name ) == prev.name) {
-					td.name += ('' + Date.now().getTime() + '' + (counter++)).replace('+', '_').replace('.', '_');
+				if (tdName == clsName || tdName == previous.name) {
+					tdName = td.name += ('' + Date.now().getTime() + '' + (counter++)).replace('+', '_').replace('.', '_');
 					
 				}
 				
-				result = td.pack.toDotPath( td.name );
+				result = tdName;
 				
 				// Remove the previous class for the the current compile.
-				Compiler.exclude( prev.name );
+				Compiler.exclude( previous.name );
 				// Add the "retyped" class into the current compile.
 				Context.defineType( td );
 				
 				// Cache the "retyped" fields in case of another "retype".
-				prev.fields = td.fields;
-				prev.name = td.pack.toDotPath( td.name );
+				previous.fields = td.fields;
+				previous.name = tdName;
 				
-				rebuildCache.set( path, prev );
+				rebuildCache.set( path, previous );
 				
 			}
 			
