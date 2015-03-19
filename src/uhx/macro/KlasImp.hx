@@ -187,9 +187,6 @@ abstract Signal<T0, T1, T2>(Map<T0, KlasSignal<T1, T2>>) from Map<T0, KlasSignal
 			history = new StringMap();
 			pendingInfo = new StringMap();
 			
-			pendingRebuild = new StringMap();
-			rebuildCache = new StringMap();
-			
 			dependencyCache = new StringMap();
 			
 			onRebuild = new Signal1();
@@ -241,17 +238,8 @@ abstract Signal<T0, T1, T2>(Map<T0, KlasSignal<T1, T2>>) from Map<T0, KlasSignal
 	public static var rebuild:StringMap<ClassType->Array<Field>->Null<TypeDefinition>>;
 	
 	/**
-	 * Holds a class path paired with its ClassType and Fields from the previous time
-	 * it was encountered.
+	 * A signal you can register with to get notified when types are rebuilt.
 	 */
-	private static var rebuildCache:StringMap<TypeInfo>;
-	
-	/**
-	 * Holds a class path with a boolean value. If true, run the
-	 * handler in `rebuild` if it has a matching metadata.
-	 */
-	private static var pendingRebuild:StringMap<Bool>;
-	
 	public static var onRebuild:Signal1<TypeInfo>;
 	
 	/**
@@ -438,29 +426,6 @@ abstract Signal<T0, T1, T2>(Map<T0, KlasSignal<T1, T2>>) from Map<T0, KlasSignal
 		
 		log( 'REBUILD :: ' + [for (key in rebuild.keys()) key] );
 		
-		for (key in rebuild.keys()) if (cls.meta.has( key )) {
-			var clsName = cls.pack.toDotPath( cls.name );
-			
-			// Build the cache.
-			if (!rebuildCache.exists( clsName )) {
-				rebuildCache.set( clsName, {
-					type: type,
-					fields: fields,
-					current: cls.toTypePath([]),
-					original: cls.toTypePath([]),
-				} );
-				
-			}
-			
-			// Run any pending calls to `KlasImp.rebuild`.
-			if (pendingRebuild.exists( clsName ) && pendingRebuild.get( clsName )) {
-				triggerRebuild( clsName, key, cls, fields );
-				pendingRebuild.set( clsName, false );
-				
-			}
-			
-		}
-		
 		return fields;
 	}
 	
@@ -472,9 +437,9 @@ abstract Signal<T0, T1, T2>(Map<T0, KlasSignal<T1, T2>>) from Map<T0, KlasSignal
 	public static function triggerRebuild(path:String, metadata:String, ?cls:ClassType, ?fields:Array<Field>):Null<TypeInfo> {
 		var result = null;
 		
-		if (rebuild.exists( metadata ) && rebuildCache.exists( path )) {
+		if (rebuild.exists( metadata ) && history.exists( path )) {
 			// Fetch the previous class and fields.
-			var cache = rebuildCache.get( path );
+			var cache = history.get( path );
 			
 			// Set `cls` and `fields` only if the cache exists.
 			if (cls == null && cache != null) cls = cache.type.getClass();
@@ -512,7 +477,7 @@ abstract Signal<T0, T1, T2>(Map<T0, KlasSignal<T1, T2>>) from Map<T0, KlasSignal
 				cache.fields = td.fields;
 				cache.current = { name: td.name, pack: td.pack };
 				
-				rebuildCache.set( path, cache );
+				history.set( path, cache );
 				
 				result = cache;
 				
@@ -520,20 +485,9 @@ abstract Signal<T0, T1, T2>(Map<T0, KlasSignal<T1, T2>>) from Map<T0, KlasSignal
 				
 			}
 			
-		} else {
-			pendingRebuild.set( path, true );
-			if (cls != null && fields != null) {
-				var cache = { 
-					type:TInst( { get:function() return cls, toString:function() return cls.pack.toDotPath( cls.name ) }, []),
-					fields:fields,
-					original:cls.toTypePath([]),
-					current:cls.toTypePath([]),
-				};
-				rebuildCache.set( path, cache );
-				
-			}
-			
 		}
+		
+		processHistory();
 		
 		return result;
 	}
@@ -570,6 +524,8 @@ abstract Signal<T0, T1, T2>(Map<T0, KlasSignal<T1, T2>>) from Map<T0, KlasSignal
 			pendingInfo.set( path, callbacks );
 			
 		}
+		
+		processHistory();
 		
 		return result;
 	}
