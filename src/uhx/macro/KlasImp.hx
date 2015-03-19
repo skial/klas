@@ -335,7 +335,10 @@ abstract Signal<T0, T1, T2>(Map<T0, KlasSignal<T1, T2>>) from Map<T0, KlasSignal
 		var fields = Context.getBuildFields();
 		var key = type.toString();
 		var cls = null;
+		
 		initialize();
+		populateHistory( type, fields );
+		processHistory();
 		
 		switch (type) {
 			case TInst(r, _) if (r != null):
