@@ -23,6 +23,14 @@ using haxe.macro.TypeTools;
 using haxe.macro.ComplexTypeTools;
 using haxe.macro.MacroStringTools;
 
+typedef TypeInformation = {
+	var type:Type;
+	var fields:Array<Field>;
+	var outputName:TypePath;
+	var currentName:TypePath;
+	var originalName:TypePath;
+}
+
 class KlasSlot<T1, T2> extends Slot<KlasSignal<T1, T2>, T1->T2->T2> {
 	
 	public var param1:T1;
@@ -190,7 +198,7 @@ abstract Signal<T0, T1, T2>(Map<T0, KlasSignal<T1, T2>>) from Map<T0, KlasSignal
 	 * Holds a class path paired with its ClassType and Fields from the previous time
 	 * it was encountered.
 	 */
-	private static var rebuildCache:StringMap<{ name:String, cls:ClassType, fields:Array<Field> }>;
+	private static var rebuildCache:StringMap<TypeInformation>;
 	
 	/**
 	 * Holds a class path with a boolean value. If true, run the
@@ -198,7 +206,7 @@ abstract Signal<T0, T1, T2>(Map<T0, KlasSignal<T1, T2>>) from Map<T0, KlasSignal
 	 */
 	private static var pendingRebuild:StringMap<Bool>;
 	
-	public static var onRebuild:Signal1<String>;
+	public static var onRebuild:Signal1<TypeInformation>;
 	
 	/**
 	 * A map of callbacks that are interested in information for a
@@ -306,7 +314,7 @@ abstract Signal<T0, T1, T2>(Map<T0, KlasSignal<T1, T2>>) from Map<T0, KlasSignal
 	 * The main build method which passes Classes and their fields
 	 * to other build macros.
 	 */
-	@:noCompletion public static function build(?isGlobal:Bool = false):Array<Field> {
+	@:noCompletion @:access(haxe.macro.TypeTools) public static function build(?isGlobal:Bool = false):Array<Field> {
 		var type = Context.getLocalType();
 		var fields = Context.getBuildFields();
 		
@@ -383,16 +391,24 @@ abstract Signal<T0, T1, T2>(Map<T0, KlasSignal<T1, T2>>) from Map<T0, KlasSignal
 		log( 'REBUILD :: ' + [for (key in rebuild.keys()) key] );
 		
 		for (key in rebuild.keys()) if (cls.meta.has( key )) {
+			var clsName = cls.pack.toDotPath( cls.name );
+			
 			// Build the cache.
-			if (!rebuildCache.exists( cls.pack.toDotPath( cls.name ) )) {
-				rebuildCache.set( cls.pack.toDotPath( cls.name ), { cls:cls, name:cls.pack.toDotPath( cls.name ), fields:fields } );
+			if (!rebuildCache.exists( clsName )) {
+				rebuildCache.set( clsName, {
+					type: type,
+					fields: fields,
+					originalName: cls.toTypePath([]),
+					currentName: cls.toTypePath([]),
+					outputName: cls.toTypePath([])
+				} );
 				
 			}
 			
 			// Run any pending calls to `KlasImp.retype`.
-			if (pendingRebuild.exists( cls.pack.toDotPath( cls.name ) ) && pendingRebuild.get( cls.pack.toDotPath( cls.name ) )) {
-				triggerRebuild( cls.pack.toDotPath( cls.name ), key, cls, fields );
-				pendingRebuild.set( cls.pack.toDotPath( cls.name ), false );
+			if (pendingRebuild.exists( clsName ) && pendingRebuild.get( clsName )) {
+				triggerRebuild( clsName, key, cls, fields );
+				pendingRebuild.set( clsName, false );
 				
 			}
 			
@@ -405,18 +421,19 @@ abstract Signal<T0, T1, T2>(Map<T0, KlasSignal<T1, T2>>) from Map<T0, KlasSignal
 	 * Starts the process of rebuilding a Class and its fields. Returns `true`
 	 * if the rebuilt type was successfull, `false` otherwise.
 	 */
-	public static function triggerRebuild(path:String, metadata:String, ?cls:ClassType, ?fields:Array<Field>):Null<String> {
+	@:access(haxe.macro.TypeTools)
+	public static function triggerRebuild(path:String, metadata:String, ?cls:ClassType, ?fields:Array<Field>):Null<TypeInformation> {
 		var result = null;
 		
 		if (rebuild.exists( metadata ) && rebuildCache.exists( path )) {
 			// Fetch the previous class and fields.
-			var previous = rebuildCache.get( path );
-			var clsName = cls.pack.toDotPath( cls.name );
+			var cache = rebuildCache.get( path );
 			
 			// Set `cls` and `fields` only if the cache exists.
-			if (cls == null && previous != null) cls = previous.cls;
-			if (fields == null && previous != null) fields = previous.fields;
-			if (previous.name == null || previous.name == '') previous.name = clsName;
+			if (cls == null && cache != null) cls = cache.type.getClass();
+			if (fields == null && cache != null) fields = cache.fields;
+			
+			var clsName = cache.originalName.pack.toDotPath( cache.originalName.name );
 			
 			if (cls != null && fields != null) {
 				// Pass `cls` and `fields` to the retype handler to get a `typedefinition` back.
@@ -434,29 +451,41 @@ abstract Signal<T0, T1, T2>(Map<T0, KlasSignal<T1, T2>>) from Map<T0, KlasSignal
 				td.meta.push( { name:':native', params:[macro $v { clsName } ], pos:cls.pos } );
 				
 				// If the TypeDefinition::name is the same as `cls.name`, modify it.
-				if (tdName == clsName || tdName == previous.name) {
+				if (tdName == clsName) {
 					tdName = td.name += ('' + Date.now().getTime() + '' + (counter++)).replace('+', '_').replace('.', '_');
 					
 				}
 				
-				result = tdName;
-				
 				// Remove the previous class for the the current compile.
-				Compiler.exclude( previous.name );
+				Compiler.exclude( cache.currentName.pack.toDotPath( cache.currentName.name ) );
 				// Add the "retyped" class into the current compile.
 				Context.defineType( td );
 				
 				// Cache the "retyped" fields in case of another "retype".
-				previous.fields = td.fields;
-				previous.name = tdName;
+				cache.fields = td.fields;
+				cache.currentName = { name: td.name, pack: td.pack };
 				
-				rebuildCache.set( path, previous );
+				rebuildCache.set( path, cache );
+				
+				result = cache;
+				
+				onRebuild.dispatch( cache );
 				
 			}
 			
 		} else {
 			pendingRebuild.set( path, true );
-			if (cls != null && fields != null) rebuildCache.set( path, { cls:cls, name:cls.pack.toDotPath( cls.name ), fields:fields } );
+			if (cls != null && fields != null) {
+				var cache = { 
+					type:TInst( { get:function() return cls, toString:function() return cls.pack.toDotPath( cls.name ) }, []),
+					fields:fields,
+					originalName:cls.toTypePath([]),
+					currentName:cls.toTypePath([]),
+					outputName:cls.toTypePath([]),
+				};
+				rebuildCache.set( path, cache );
+				
+			}
 			
 		}
 		
