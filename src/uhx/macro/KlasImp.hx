@@ -175,7 +175,6 @@ abstract Signal<T0, T1, T2>(Map<T0, KlasSignal<T1, T2>>) from Map<T0, KlasSignal
 	public static function initialize() {
 		if (isSetup == null || isSetup == false) {
 			// Initialize public hooks first.
-			once = new Signal0();
 			info = new StringMap();
 			rebuild = new StringMap();
 			inlineMetadata = new Map();
@@ -200,8 +199,6 @@ abstract Signal<T0, T1, T2>(Map<T0, KlasSignal<T1, T2>>) from Map<T0, KlasSignal
 	public static function addGlobalMetadata(pathFilter:String, meta:String, ?recursive:Bool = true, ?toTypes:Bool = true, ?toFields:Bool = false) {
 		Compiler.addGlobalMetadata( pathFilter, meta, recursive, toTypes, toFields );
 	}
-	
-	public static var once:Signal0;
 	
 	/**
 	 * A callback which will be run on every class encountered.
@@ -272,7 +269,8 @@ abstract Signal<T0, T1, T2>(Map<T0, KlasSignal<T1, T2>>) from Map<T0, KlasSignal
 	 * Called by KlasImp's `extraParams.hxml` file for globally applied
 	 * metadata.
 	 */
-	@:noCompletion public static function inspection():Array<Field> {
+	@:noCompletion
+	public static function inspection():Array<Field> {
 		initialize();
 		populateHistory( Context.getLocalType(), Context.getBuildFields() );
 		processHistory();
@@ -318,7 +316,8 @@ abstract Signal<T0, T1, T2>(Map<T0, KlasSignal<T1, T2>>) from Map<T0, KlasSignal
 		}
 	}
 	
-	@:noCompletion public static function dependency():Array<Field> {
+	@:noCompletion
+	public static function dependency():Array<Field> {
 		var type = Context.getLocalType();
 		var fields = Context.getBuildFields();
 		var key = type.toString();
@@ -355,7 +354,9 @@ abstract Signal<T0, T1, T2>(Map<T0, KlasSignal<T1, T2>>) from Map<T0, KlasSignal
 	 * The main build method which passes Classes and their fields
 	 * to other build macros.
 	 */
-	@:noCompletion @:access(haxe.macro.TypeTools) public static function build(?isGlobal:Bool = false):Array<Field> {
+	@:noCompletion 
+	@:access(haxe.macro.TypeTools)
+	public static function build(?isGlobal:Bool = false):Array<Field> {
 		var type = Context.getLocalType();
 		var fields = Context.getBuildFields();
 		
@@ -374,11 +375,6 @@ abstract Signal<T0, T1, T2>(Map<T0, KlasSignal<T1, T2>>) from Map<T0, KlasSignal
 		log( cls.pack.toDotPath( cls.name ) + ' :: ' + [for (meta in cls.meta.get()) meta.name ] );
 		
 		if (cls.meta.has(':KLAS_SKIP')) return fields;
-		
-		// Run all callbacks registered with `once`.
-		once.dispatch();
-		// Remove all callbacks in case the user didnt use `addOnce*`.
-		once.removeAll();
 		
 		/**
 		 * Loop through any class metadata and pass along 
@@ -584,7 +580,9 @@ abstract Signal<T0, T1, T2>(Map<T0, KlasSignal<T1, T2>>) from Map<T0, KlasSignal
 			switch (type) {
 				case TInst(r, p) if (r != null):
 					for (field in r.get().statics.get()) if (field.name == '__klasDependencies__') {
-						//field.meta.add( ':extern', [], field.pos );
+						#if !klas_verbose
+						field.meta.add( ':extern', [], field.pos );
+						#end
 						
 					}
 					
