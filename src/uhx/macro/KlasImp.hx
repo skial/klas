@@ -17,6 +17,7 @@ import haxe.macro.Compiler;
 import uhx.macro.klas.Signal;
 import uhx.macro.klas.RVSlot;
 import uhx.macro.klas.RVSignal;
+import uhx.macro.klas.TypeInfo;
 
 using Lambda;
 using StringTools;
@@ -24,14 +25,6 @@ using sys.FileSystem;
 using haxe.macro.TypeTools;
 using haxe.macro.ComplexTypeTools;
 using haxe.macro.MacroStringTools;
-
-typedef TypeInfo = {
-	var type:Type;
-	var fields:Array<Field>;
-	var current:TypePath;
-	var original:TypePath;
-}
-
 #end
 
 /**
