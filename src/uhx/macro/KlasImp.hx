@@ -298,8 +298,8 @@ typedef TypeInfo = {
 	}
 	
 	/**
-	 * Starts the process of rebuilding a Class and its fields. Returns `true`
-	 * if the rebuilt type was successfull, `false` otherwise.
+	 * Starts the process of rebuilding a Class and its fields. Returns information
+	 * if the rebuilt type was successfull, `null` otherwise.
 	 */
 	@:access(haxe.macro.TypeTools)
 	public static function triggerRebuild(path:String, metadata:String, ?cls:ClassType, ?fields:Array<Field>):Null<TypeInfo> {

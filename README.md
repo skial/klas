@@ -11,6 +11,8 @@ with Klas can be accessed with metadata.
 		<td><a href="#register-a-build-macro-with-klas">Register w/ Klas</a></td>
 		<td><a href="#build-hooks">Build Hooks</a></td>
 		<td><a href="#build-order">Build Order</a></td>
+		<td><a href="#utilities">Utilities</a></td>
+		<td><a href="#conditional-defines">Defines</a></td>
 		<td><a href="#example">Example</a></td>
 		<td><a href="#libraries-using-klas">Libs using Klas</a></td>
 	</tr>
@@ -219,6 +221,20 @@ The `info` hook _might_ be processed before all other hooks.
 
 `rebuild` will only run after `allMetadata` if any pending calls to `uhx.macro.KlasImp.rebuild` exist.
 Otherwise it runs whenever it is called with `uhx.macro.KlasImp.triggerRebuild`.
+
+## Utilities
+
+1.	`triggerRebuild`. Attempt to rebuild the type specified by `path` if it has matching
+	`metadata`. If successfull, an `TypeInfo` object will be return, otherwise `null` is returned.
+2.	`onRebuild`. A signal which will notify you when a type has been rebuilt.
+3.	`inspect`. Register a callback to be called when the specified `path` is detected.
+4.	`generateBefore`. Used to generate `a` before `b` in the output.
+5.	`generateAfter`. Used to generate `a` after `b` in the output.
+
+## Conditional Defines
+
+1.	`klas_verbose`. Setting this will leave certain utility fields in your output and
+	print debug information to your terminal.
 
 ## Example
 
