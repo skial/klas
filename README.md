@@ -15,6 +15,7 @@ with Klas can be accessed with metadata.
 	<tr>
 		<td><a href="#utilities">Utilities</a></td>
 		<td><a href="#conditional-defines">Defines</a></td>
+		<td><a href="#metadata">Metadata</a></td>
 		<td><a href="#example">Example</a></td>
 		<td><a href="#libraries-using-klas">Libs using Klas</a></td>
 	</tr>
@@ -226,18 +227,36 @@ Otherwise it runs whenever it is called with `uhx.macro.KlasImp.triggerRebuild`.
 
 ## Utilities
 
-1.	`triggerRebuild`. Attempt to rebuild the type specified by `path` if it has matching
-	`metadata`. If successfull, an `TypeInfo` object will be return, otherwise `null` is returned.
-2.	`onRebuild`. A signal which will notify you when a type has been rebuilt.
-3.	`inspect`. Register a callback to be called when the specified `path` is detected.
-4.	`generateBefore`. Used to generate `a` before `b` in the output.
-5.	`generateAfter`. Used to generate `a` after `b` in the output.
+You can call these utility methods from your macro methods.
+
+1.	`uhx.macro.KlasImp.triggerRebuild(path:String, metadata:String, ?cls:ClassType, ?fields:Array<Field>):Null<TypeInfo>`. 
+	Attempt to rebuild the type specified by `path` if it has matching`metadata`. 
+	If successfull, a `TypeInfo` object will be returned, otherwise `null` is returned.
+	
+2.	`uhx.macro.KlasImp.onRebuild:Signal1<TypeInfo>`. 
+	A signal which will notify you when a type has been rebuilt.
+	
+3.	`uhx.macro.KlasImp.inspect(path:String, callback:Type->Array<Field>->Void):Bool`.
+	Register a callback to be called when the specified `path` is detected.
+	
+4.	`uhx.macro.KlasImp.generateBefore(a:TypePath, b:TypePath):Void`.
+	Used to generate `a` before `b` in the output.
+
+5.	`uhx.macro.KlasImp.generateAfter(a:TypePath, b:TypePath):Void`.
+	Used to generate `a` after `b` in the output.
 
 ## Conditional Defines
 
-1.	`klas_verbose`. Setting this will leave certain utility fields in your output and
+Add the following defines to your `hxml` file.
+
+1.	`-D klas_verbose`. Setting this will leave certain utility fields in your output and
 	print debug information to your terminal.
 
+## Metadata
+
+1.	`@:KLAS_SKIP`. Used internally to completely skip a type from being processed
+	by Klas.
+	
 ## Example
 
 The following `initialize`, `build` and `handler` methods are taken from [Wait.hx].
