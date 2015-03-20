@@ -401,39 +401,28 @@ typedef TypeInfo = {
 	/**
 	 * Generate `a` before `b`.
 	 */
-	public static function generateBefore(a:ComplexType, b:ComplexType):Void {
-		switch ([a, b]) {
-			case [TPath(_a), TPath(_b)]:
-				var aname = _a.pack.toDotPath( _a.name );
-				var bname = _b.pack.toDotPath( _b.name );
-				
-				var values = dependencyCache.exists( bname ) ? dependencyCache.get( bname ) : [];
-				values.push( macro $p { _a.pack.concat( [_a.name] ) } );
-				
-				dependencyCache.set( bname, values );
-				
-			case _:
-				
-		}
+	public static function generateBefore(a:TypePath, b:TypePath):Void {
+		var aname = a.pack.toDotPath( a.name );
+		var bname = b.pack.toDotPath( b.name );
+		
+		var values = dependencyCache.exists( bname ) ? dependencyCache.get( bname ) : [];
+		values.push( macro $p { a.pack.concat( [a.name] ) } );
+		
+		dependencyCache.set( bname, values );
+
 	}
 	
 	/**
 	 * Generate `a` after `b`.
 	 */
-	public static function generateAfter(a:ComplexType, b:ComplexType):Void {
-		switch ([a, b]) {
-			case [TPath(_a), TPath(_b)]:
-				var aname = _a.pack.toDotPath( _a.name );
-				var bname = _b.pack.toDotPath( _b.name );
-				
-				var values = dependencyCache.exists( aname ) ? dependencyCache.get( aname ) : [];
-				values.push( macro $p { _b.pack.concat( [_b.name] ) } );
-				
-				dependencyCache.set( aname, values );
-				
-			case _:
-				
-		}
+	public static function generateAfter(a:TypePath, b:TypePath):Void {
+		var aname = a.pack.toDotPath( a.name );
+		var bname = b.pack.toDotPath( b.name );
+		
+		var values = dependencyCache.exists( aname ) ? dependencyCache.get( aname ) : [];
+		values.push( macro $p { b.pack.concat( [b.name] ) } );
+		
+		dependencyCache.set( aname, values );
 	}
 	
 	private static function metadataFilter(meta:MetadataEntry, tag:String, pack:String):Bool {
@@ -468,7 +457,8 @@ typedef TypeInfo = {
 	/**
 	 * Used internally by KlasImp.
 	 */
-	@:noCompletion public static macro function getDependencies(key:String):Expr {
+	@:noCompletion
+	public static macro function getDependencies(key:String):Expr {
 		var values = dependencyCache.get( key );
 		return values == null ? macro null : macro [$a { values }];
 	}
