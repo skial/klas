@@ -218,7 +218,7 @@ the hook after the line `KlasImp.initialize()` in your `initialize` method.
 3.	`fieldMetadata`
 4.	`inlineMetadata`
 5.	`allMetadata`
-6.	`rebuid`
+6.	`rebuild`
 
 The `info` hook _might_ be processed before all other hooks.
 
@@ -231,7 +231,7 @@ You can call these utility methods from your macro methods.
 
 1.	`KlasImp.triggerRebuild(path:String, metadata:String):Null<TypeInfo>`. 
 	Attempt to rebuild the type specified by `path` if it has matching`metadata`. 
-	If successfull, a `TypeInfo` object will be returned, otherwise `null` is returned.
+	If successful, a `TypeInfo` object will be returned, otherwise `null` is returned.
 	
 2.	`KlasImp.onRebuild:Signal1<TypeInfo>`. 
 	A signal which will notify you when a type has been rebuilt.
