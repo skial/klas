@@ -1,16 +1,23 @@
 package uhx.macro;
 
 import haxe.Json;
+import Type in StdType;
+import haxe.ds.StringMap;
+
+#if macro
 import sys.io.File;
 import sys.FileSystem;
 import sys.io.Process;
-import Type in StdType;
+import msignal.Signal;
 import haxe.macro.Type;
 import haxe.macro.Expr;
-import haxe.ds.StringMap;
 import haxe.macro.Context;
 import haxe.macro.Printer;
 import haxe.macro.Compiler;
+import uhx.macro.klas.Signal;
+import uhx.macro.klas.RVSlot;
+import uhx.macro.klas.RVSignal;
+import uhx.macro.klas.TypeInfo;
 
 using Lambda;
 using StringTools;
@@ -18,6 +25,7 @@ using sys.FileSystem;
 using haxe.macro.TypeTools;
 using haxe.macro.ComplexTypeTools;
 using haxe.macro.MacroStringTools;
+#end
 
 /**
  * ...
@@ -26,23 +34,28 @@ using haxe.macro.MacroStringTools;
 
 @:KLAS_SKIP class KlasImp {
 	
-	public static var isSetup:Bool = false;
+	#if macro
+	private static var isSetup:Bool = false;
 	
 	public static function initialize() {
 		if (isSetup == null || isSetup == false) {
+			// Initialize public hooks first.
+			info = new StringMap();
+			rebuild = new StringMap();
+			inlineMetadata = new Map();
+			allMetadata = new RVSignal();
+			classMetadata = new StringMap();
+			fieldMetadata = new StringMap();
+			
+			// Initialize internal variables
 			history = new StringMap();
-			DEFAULTS = new StringMap();
-			CLASS_META = new StringMap();
-			FIELD_META = new StringMap();
-			INLINE_META = new Map();
-			ONCE = [];
+			pendingInfo = new StringMap();
 			
-			RETYPE = new StringMap();
-			RETYPE_PENDING = new StringMap();
-			RETYPE_PREVIOUS = new StringMap();
+			dependencyCache = new StringMap();
 			
-			INFO = new StringMap();
-			INFO_PENDING = new StringMap();
+			onRebuild = new Signal1();
+			
+			Context.onGenerate( KlasImp.onGenerate );
 			
 			isSetup = true;
 		}
@@ -52,47 +65,57 @@ using haxe.macro.MacroStringTools;
 		Compiler.addGlobalMetadata( pathFilter, meta, recursive, toTypes, toFields );
 	}
 	
-	public static var DEFAULTS:StringMap<ClassType->Array<Field>->Array<Field>>;
-	public static var CLASS_META:StringMap<ClassType->Array<Field>->Array<Field>>;
-	public static var FIELD_META:StringMap<ClassType->Field->Field>;	
-	public static var INLINE_META:Map<EReg, ClassType->Field->Field>;
-	public static var ONCE:Array<Void->Void>;
+	/**
+	 * A callback which will be run on every class encountered.
+	 */
+	public static var allMetadata:RVSignal<ClassType, Array<Field>>;
 	
 	/**
-	 * Simply holds a class path with a boolean value. If true, run the
-	 * handler in `RETYPE` if it has a matching metadata.
+	 * A callback which will be run only when the specified metadata
+	 * has been found on a class.
 	 */
-	public static var RETYPE_PENDING:StringMap<Bool>;
+	public static var classMetadata:Signal<String, ClassType, Array<Field>>;
+	
+	/**
+	 * A callback which will be run only when the specified metadata
+	 * has been found on a field.
+	 */
+	public static var fieldMetadata:Signal<String, ClassType, Field>;
+	
+	/**
+	 * A callback which will be run only when a field has inline
+	 * metadata matching the regular expression.
+	 */
+	public static var inlineMetadata:Signal<EReg, ClassType, Field>;
+	
+	/**
+	 * A simple counter used in the naming of new `TypeDefinition`.
+	 */
+	private static var counter:Int = 0;
 	
 	/**
 	 * A list of metadata paired with a handler method returning a 
 	 * rebuilt class.
 	 */
-	public static var RETYPE:StringMap<ClassType->Array<Field>->Null<TypeDefinition>>;
+	public static var rebuild:StringMap<ClassType->Array<Field>->Null<TypeDefinition>>;
 	
 	/**
-	 * Holds a class path paired with its ClassType and Fields from the previous time
-	 * it was encountered.
+	 * A signal you can register with to get notified when types are rebuilt.
 	 */
-	public static var RETYPE_PREVIOUS:StringMap<{ name:String, cls:ClassType, fields:Array<Field> }>;
-	
-	/**
-	 * A simple counter used in the naming of new `TypeDefinition`.
-	 */
-	private static var RETYPE_COUNTER:Int = 0;
+	public static var onRebuild:Signal1<TypeInfo>;
 	
 	/**
 	 * A map of callbacks that are interested in information for a
 	 * perticular type.
 	 */
-	public static var INFO:StringMap<Array<Type->Array<Field>->Void>>;
+	public static var info:StringMap<Array<Type->Array<Field>->Void>>;
 	
 	/**
 	 * Holds paths, which are the key, with an array of callbacks
 	 * wanting to inspect `Type` and `Array<Field>`. You should not
 	 * modify any of the `Field`.
 	 */
-	public static var INFO_PENDING:StringMap<Array<Type->Array<Field>->Void>>;
+	private static var pendingInfo:StringMap<Array<Type->Array<Field>->Void>>;
 	
 	/**
 	 * Used to turn `Expr` and `TypeDefinition` into readable Haxe code.
@@ -103,26 +126,33 @@ using haxe.macro.MacroStringTools;
 	 * Holds a list of types and their fields internally if global build has 
 	 * been forced on all types.
 	 */
-	private static var history:StringMap<{ type:Type, fields:Array<Field> }>;
+	private static var history:StringMap<TypeInfo>;
+	
+	private static var dependencyCache:StringMap<Array<Expr>>;
 	
 	/**
 	 * Called by KlasImp's `extraParams.hxml` file for globally applied
 	 * metadata.
 	 */
+	@:noCompletion
 	public static function inspection():Array<Field> {
-		var type = Context.getLocalType();
-		var fields = Context.getBuildFields();
-		
 		initialize();
-		
-		if (type != null && !history.exists( type.toString() )) {
-			history.set( type.toString(), { type:type, fields:fields } );
-			
-		}
-		
+		populateHistory( Context.getLocalType(), Context.getBuildFields() );
 		processHistory();
 		
-		return fields;
+		return Context.getBuildFields();
+	}
+	
+	/**
+	 * Collect information on the current type.
+	 */
+	private static function populateHistory(type:Type, fields:Array<Field>):Void {
+		if (type != null && !history.exists( type.toString() )) {
+			var parts = type.toString().split('.');
+			var typePath = { name: parts.pop(), pack: parts };
+			history.set( type.toString(), { type:type, fields:fields, original:typePath, current:typePath } );
+			
+		}
 	}
 	
 	/**
@@ -131,30 +161,66 @@ using haxe.macro.MacroStringTools;
 	private static function processHistory():Void {
 		var _history = null;
 		
-		for (key in INFO.keys()) if (history.exists( key )) {
+		for (key in info.keys()) if (history.exists( key )) {
 			_history = history.get( key );
 			
 			// Process any pending calls.
-			if (INFO_PENDING.exists( key )) {
-				for (cb in INFO_PENDING.get( key )) {
+			if (pendingInfo.exists( key )) {
+				for (cb in pendingInfo.get( key )) {
 					cb( _history.type, _history.fields );
 				}
 				
-				INFO_PENDING.remove( key );
+				pendingInfo.remove( key );
 				
 			}
 			
-			for (cb in INFO.get( key )) cb( _history.type, _history.fields );
+			for (cb in info.get( key )) cb( _history.type, _history.fields );
 			
 			// All callbacks have been called, clear from the map.
-			INFO.remove( key );
+			info.remove( key );
 		}
+	}
+	
+	@:noCompletion
+	public static function dependency():Array<Field> {
+		var type = Context.getLocalType();
+		var fields = Context.getBuildFields();
+		var key = type.toString();
+		var cls = null;
+		
+		initialize();
+		populateHistory( type, fields );
+		processHistory();
+		
+		switch (type) {
+			case TInst(r, _) if (r != null):
+				var cls = r.get();
+				
+				if (!cls.isInterface && !cls.isExtern && !cls.meta.has(':coreApi') && !cls.meta.has(':coreType') && !cls.meta.has(':KLAS_SKIP')) {
+					if (!fields.exists( function(f) return f.name == '__klasDependencies__' )) {
+						
+						fields = fields.concat( (macro class Temp {
+							@:skip @:ignore @:noCompletion @:noDebug @:noDoc 
+							public static var __klasDependencies__:Array<Class<Dynamic>> = uhx.macro.KlasImp.getDependencies( $v { key } );
+						}).fields );
+						
+					}
+					
+				}
+				
+			case _:
+				
+		}
+		
+		return fields;
 	}
 	
 	/**
 	 * The main build method which passes Classes and their fields
 	 * to other build macros.
 	 */
+	@:noCompletion 
+	@:access(haxe.macro.TypeTools)
 	public static function build(?isGlobal:Bool = false):Array<Field> {
 		var type = Context.getLocalType();
 		var fields = Context.getBuildFields();
@@ -168,21 +234,12 @@ using haxe.macro.MacroStringTools;
 		
 		initialize();
 		
-		// Populate `history`.
-		if (type != null && !history.exists( type.toString() )) {
-			history.set( type.toString(), { type:type, fields:fields } );
-			
-		}
-		
+		populateHistory( type, fields );
 		processHistory();
 		
 		log( cls.pack.toDotPath( cls.name ) + ' :: ' + [for (meta in cls.meta.get()) meta.name ] );
 		
 		if (cls.meta.has(':KLAS_SKIP')) return fields;
-		
-		// Call all callbacks.
-		for (once in ONCE) once();
-		ONCE = [];
 		
 		/**
 		 * Loop through any class metadata and pass along 
@@ -192,13 +249,14 @@ using haxe.macro.MacroStringTools;
 		 * while in IDE display mode, `-D display`.
 		 */
 		
-		log( 'CLASS_META :: ' + [for (key in CLASS_META.keys()) key] );
+		log( 'CLASS_META :: ' + [for (key in classMetadata.keys()) key] );
 		
-		for (key in CLASS_META.keys()) if (cls.meta.has( key )) {
-			fields = CLASS_META.get( key )( cls, fields );
+		for (key in classMetadata.keys()) if (cls.meta.has( key )) {
+			fields = classMetadata.dispatch( key, cls, fields );
+			
 		}
 		
-		log( 'FIELD_META :: ' + [for (key in FIELD_META.keys()) key] );
+		log( 'FIELD_META :: ' + [for (key in fieldMetadata.keys()) key] );
 		
 		for (i in 0...fields.length) {
 			
@@ -206,105 +264,92 @@ using haxe.macro.MacroStringTools;
 			
 			// First check the field's metadata for matches. 
 			// Passing along the class and matched field.
-			for (key in FIELD_META.keys()) if (field.meta != null && field.meta.exists( function(m) return m.name == key )) {
-				field = FIELD_META.get( key )( cls, field );
+			for (key in fieldMetadata.keys()) if (field.meta != null && field.meta.exists( function(m) return m.name == key )) {
+				//field = fieldMetadata.get( key )( cls, field );
+				field = fieldMetadata.dispatch( key, cls, field );
+				
 			}
 			
 			var printed = printer.printField( field );
 			//trace( printed );
 			// Now check the stringified field for matching inline metadata.
 			// Passing along the class and matched field.
-			for (key in INLINE_META.keys()) if (key.match( printed )) {
-				field = INLINE_META.get( key )( cls, field );
+			for (key in inlineMetadata.keys()) if (key.match( printed )) {
+				//field = inlineMetadata.get( key )( cls, field );
+				field = inlineMetadata.dispatch( key, cls, field );
 			}
 			
 			fields[i] = field;
 			
 		}
 		
-		log( 'DEFAULTS :: ' + [for (key in DEFAULTS.keys()) key] );
+		fields = allMetadata.dispatch(cls, fields);
 		
-		for (def in DEFAULTS) {
-			fields = def( cls, fields );
-		}
-		
-		log( 'RETYPE :: ' + [for (key in RETYPE.keys()) key] );
-		
-		for (key in RETYPE.keys()) if (cls.meta.has( key )) {
-			// Build the cache.
-			if (!RETYPE_PREVIOUS.exists( cls.pack.toDotPath( cls.name ) )) {
-				RETYPE_PREVIOUS.set( cls.pack.toDotPath( cls.name ), { cls:cls, name:cls.pack.toDotPath( cls.name ), fields:fields } );
-				
-			}
-			
-			// Run any pending calls to `KlasImp.retype`.
-			if (RETYPE_PENDING.exists( cls.pack.toDotPath( cls.name ) ) && RETYPE_PENDING.get( cls.pack.toDotPath( cls.name ) )) {
-				retype( cls.pack.toDotPath( cls.name ), key, cls, fields );
-				RETYPE_PENDING.set( cls.pack.toDotPath( cls.name ), false );
-				
-			}
-			
-		}
+		log( 'REBUILD :: ' + [for (key in rebuild.keys()) key] );
 		
 		return fields;
 	}
 	
 	/**
-	 * Starts the process of rebuilding a Class and its fields. Returns `true`
-	 * is the rebuilt was a success, `false` otherwise.
+	 * Starts the process of rebuilding a Class and its fields. Returns information
+	 * if the rebuilt type was successfull, `null` otherwise.
 	 */
-	public static function retype(path:String, metadata:String, ?cls:ClassType, ?fields:Array<Field>):Bool {
-		var result = false;
+	@:access(haxe.macro.TypeTools)
+	public static function triggerRebuild(path:String, metadata:String):Null<TypeInfo> {
+		var result = null;
 		
-		if (RETYPE.exists( metadata ) && RETYPE_PREVIOUS.exists( path )) {
+		if (rebuild.exists( metadata ) && history.exists( path )) {
 			// Fetch the previous class and fields.
-			var prev = RETYPE_PREVIOUS.get( path );
+			var cache = history.get( path );
+			var clsName = cache.original.pack.toDotPath( cache.original.name );
 			
-			// Set `cls` and `fields` only if the cache exists.
-			if (cls == null && prev != null) cls = prev.cls;
-			if (fields == null && prev != null) fields = prev.fields;
-			if (prev.name == null || prev.name == '') prev.name = cls.pack.toDotPath( cls.name );
-			
-			if (cls != null && fields != null) {
+			if (cache.type.match(TInst(_, _)) && cache.fields != null) {
+				var cls = cache.type.getClass();
+				
+				// Check that the selected class has the required `metadata`.
+				if (!cls.meta.has( metadata )) return result;
+				
 				// Pass `cls` and `fields` to the retype handler to get a `typedefinition` back.
-				var td = RETYPE.get( metadata )( cls, fields );
+				var td = rebuild.get( metadata )( cls, cache.fields );
 				
-				if (td == null) return false;
+				if (td == null) return result;
 				
-				var nativeF = metadataFilter.bind(_, ':native', cls.pack.toDotPath( cls.name ));
+				var tdName = td.pack.toDotPath( td.name );
+				var nativeF = metadataFilter.bind(_, ':native', clsName);
 				
 				// Check if `@:native('path.to.Class')` exists. Remove any found.
 				if (td.meta != null && td.meta.exists( nativeF )) for (m in td.meta.filter( nativeF )) td.meta.remove( m );
 				
 				// Add `@:native` and use the original package and type name.
-				td.meta.push( { name:':native', params:[macro $v { cls.pack.toDotPath( cls.name ) } ], pos:cls.pos } );
+				td.meta.push( { name:':native', params:[macro $v { clsName } ], pos:cls.pos } );
 				
 				// If the TypeDefinition::name is the same as `cls.name`, modify it.
-				if (td.pack.toDotPath( td.name ) == cls.pack.toDotPath( cls.name ) || td.pack.toDotPath( td.name ) == prev.name) {
-					td.name += ('' + Date.now().getTime() + '' + (RETYPE_COUNTER++)).replace('+', '_').replace('.', '_');
+				if (tdName == clsName) {
+					tdName = td.name += ('' + Date.now().getTime() + '' + (counter++)).replace('+', '_').replace('.', '_');
 					
 				}
 				
 				// Remove the previous class for the the current compile.
-				Compiler.exclude( prev.name );
+				Compiler.exclude( cache.current.pack.toDotPath( cache.current.name ) );
 				// Add the "retyped" class into the current compile.
 				Context.defineType( td );
 				
-				// Cache the "retyped" fields in case of another "retype".
-				prev.fields = td.fields;
-				prev.name = td.pack.toDotPath( td.name );
+				// Cache the "rebuilt" fields in case of another "rebuild".
+				cache.fields = td.fields;
+				// Update the current name
+				cache.current = { name: td.name, pack: td.pack };
 				
-				RETYPE_PREVIOUS.set( path, prev );
+				history.set( path, cache );
 				
-				result = true;
+				result = cache;
+				
+				onRebuild.dispatch( cache );
 				
 			}
 			
-		} else {
-			RETYPE_PENDING.set( path, true );
-			if (cls != null && fields != null) RETYPE_PREVIOUS.set( path, { cls:cls, name:cls.pack.toDotPath( cls.name ), fields:fields } );
-			
 		}
+		
+		processHistory();
 		
 		return result;
 	}
@@ -322,12 +367,12 @@ using haxe.macro.MacroStringTools;
 			_history = history.get( path );
 			
 			// Process any pending calls.
-			if (INFO_PENDING.exists( path )) {
-				for (cb in INFO_PENDING.get( path )) {
+			if (pendingInfo.exists( path )) {
+				for (cb in pendingInfo.get( path )) {
 					cb( _history.type, _history.fields );
 				}
 				
-				INFO_PENDING.remove( path );
+				pendingInfo.remove( path );
 				
 			}
 			
@@ -335,14 +380,43 @@ using haxe.macro.MacroStringTools;
 			result = true;
 			
 		} else {
-			var callbacks = INFO_PENDING.exists( path ) ? INFO_PENDING.get( path ) : [];
+			var callbacks = pendingInfo.exists( path ) ? pendingInfo.get( path ) : [];
 			callbacks.push( callback );
 			
-			INFO_PENDING.set( path, callbacks );
+			pendingInfo.set( path, callbacks );
 			
 		}
 		
+		processHistory();
+		
 		return result;
+	}
+	
+	/**
+	 * Generate `a` before `b`.
+	 */
+	public static function generateBefore(a:TypePath, b:TypePath):Void {
+		var aname = a.pack.toDotPath( a.name );
+		var bname = b.pack.toDotPath( b.name );
+		
+		var values = dependencyCache.exists( bname ) ? dependencyCache.get( bname ) : [];
+		values.push( macro $p { a.pack.concat( [a.name] ) } );
+		
+		dependencyCache.set( bname, values );
+
+	}
+	
+	/**
+	 * Generate `a` after `b`.
+	 */
+	public static function generateAfter(a:TypePath, b:TypePath):Void {
+		var aname = a.pack.toDotPath( a.name );
+		var bname = b.pack.toDotPath( b.name );
+		
+		var values = dependencyCache.exists( aname ) ? dependencyCache.get( aname ) : [];
+		values.push( macro $p { b.pack.concat( [b.name] ) } );
+		
+		dependencyCache.set( aname, values );
 	}
 	
 	private static function metadataFilter(meta:MetadataEntry, tag:String, pack:String):Bool {
@@ -353,6 +427,34 @@ using haxe.macro.MacroStringTools;
 		#if klas_verbose
 		Sys.println( value );
 		#end
+	}
+	
+	private static function onGenerate(types:Array<Type>):Void {
+		for (type in types) {
+			// Prevent `__klasDependencies__` being included in the output.
+			switch (type) {
+				case TInst(r, p) if (r != null):
+					for (field in r.get().statics.get()) if (field.name == '__klasDependencies__') {
+						#if !klas_verbose
+						field.meta.add( ':extern', [], field.pos );
+						#end
+						
+					}
+					
+				case _:
+					
+			}
+		}
+	}
+	#end
+	
+	/**
+	 * Used internally by KlasImp.
+	 */
+	@:noCompletion
+	public static macro function getDependencies(key:String):Expr {
+		var values = dependencyCache.get( key );
+		return values == null ? macro null : macro [$a { values }];
 	}
 	
 }
