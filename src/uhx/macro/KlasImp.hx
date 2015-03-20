@@ -6,15 +6,17 @@ import haxe.ds.StringMap;
 
 #if macro
 import sys.io.File;
-import msignal.Slot;
-import msignal.Signal;
 import sys.FileSystem;
 import sys.io.Process;
+import msignal.Signal;
 import haxe.macro.Type;
 import haxe.macro.Expr;
 import haxe.macro.Context;
 import haxe.macro.Printer;
 import haxe.macro.Compiler;
+import uhx.macro.klas.Signal;
+import uhx.macro.klas.RVSlot;
+import uhx.macro.klas.RVSignal;
 
 using Lambda;
 using StringTools;
@@ -28,136 +30,6 @@ typedef TypeInfo = {
 	var fields:Array<Field>;
 	var current:TypePath;
 	var original:TypePath;
-}
-
-class KlasSlot<T1, T2> extends Slot<KlasSignal<T1, T2>, T1->T2->T2> {
-	
-	public var param1:T1;
-	public var param2:T2;
-
-	public function new(signal:KlasSignal<T1, T2>, listener:T1->T2->T2, once:Bool = false, priority:Int = 0) {
-		super(signal, listener, once, priority);
-	}
-	
-	public function execute(value1:T1, value2:T2):Null<T2> {
-		if (!enabled) return null;
-		if (once) remove();
-		
-		if (param1 != null) value1 = param1;
-		if (param2 != null) value2 = param2;
-		
-		return listener(value1, value2);
-	}
-}
-
-class KlasSignal<T1, T2> extends msignal.Signal<KlasSlot<T1, T2>, T1->T2->T2> {
-	
-	public function new(?type1:Dynamic = null, ?type2:Dynamic = null) {
-		super([type1, type2]);
-	}
-	
-	public function dispatch(value1:T1, value2:T2):T2 {
-		var slotsToProcess = slots;
-		
-		while (slotsToProcess.nonEmpty) {
-			value2 = slotsToProcess.head.execute(value1, value2);
-			slotsToProcess = slotsToProcess.tail;
-			
-		}
-		
-		return value2;
-	}
-
-	override function createSlot(listener:T1->T2->T2, once:Bool = false, priority:Int = 0) {
-		return new KlasSlot<T1, T2>(this, listener, once, priority);
-	}
-}
-
-
-@:forward(keys, exists, iterator) 
-abstract Signal<T0, T1, T2>(Map<T0, KlasSignal<T1, T2>>) from Map<T0, KlasSignal<T1, T2>> to Map<T0, KlasSignal<T1, T2>> {
-	
-	public inline function new(u:Map<T0, KlasSignal<T1, T2>>) this = u;
-	
-	public inline function add(metadata:T0, callback:T1->T2->T2):KlasSlot<T1, T2> {
-		var signal = null;
-		
-		if (this.exists( metadata )) {
-			signal = this.get( metadata );
-		} else {
-			signal = new KlasSignal();
-			this.set( metadata, signal );
-			
-		}
-		
-		return signal.add( callback );
-	}
-	
-	public inline function addOnce(metadata:T0, callback:T1->T2->T2):KlasSlot<T1, T2> {
-		var signal = null;
-		
-		if (this.exists( metadata )) {
-			signal = this.get( metadata );
-		} else {
-			signal = new KlasSignal();
-			this.set( metadata, signal );
-			
-		}
-		
-		return signal.addOnce( callback );
-	}
-	
-	public inline function addWithPriority(metadata:T0, callback:T1->T2->T2, ?priority:Int = 0):KlasSlot<T1, T2> {
-		var signal = null;
-		
-		if (this.exists( metadata )) {
-			signal = this.get( metadata );
-		} else {
-			signal = new KlasSignal();
-			this.set( metadata, signal );
-			
-		}
-		
-		return signal.addWithPriority( callback, priority );
-	}
-	
-	public inline function addOnceWithPriority(metadata:T0, callback:T1->T2->T2, ?priority:Int = 0):KlasSlot<T1, T2> {
-		var signal = null;
-		
-		if (this.exists( metadata )) {
-			signal = this.get( metadata );
-		} else {
-			signal = new KlasSignal();
-			this.set( metadata, signal );
-			
-		}
-		
-		return signal.addOnceWithPriority( callback, priority );
-	}
-	
-	public inline function remove(metadata:T0, callback:T1->T2->T2):KlasSlot<T1, T2> {
-		var signal = null;
-		
-		if (this.exists( metadata )) {
-			signal = this.get( metadata );
-		} else {
-			signal = new KlasSignal();
-			this.set( metadata, signal );
-			
-		}
-		
-		return signal.remove( callback );
-	}
-	
-	public inline function removeAll(metadata:T0):Void {
-		if (this.exists( metadata )) this.get( metadata ).removeAll();
-	}
-	
-	public inline function dispatch(metadata:T0, value1:T1, value2:T2):T2 {
-		if (this.exists( metadata )) value2 = this.get( metadata ).dispatch( value1, value2 );
-		return value2;
-	}
-	
 }
 
 #end
@@ -178,7 +50,7 @@ abstract Signal<T0, T1, T2>(Map<T0, KlasSignal<T1, T2>>) from Map<T0, KlasSignal
 			info = new StringMap();
 			rebuild = new StringMap();
 			inlineMetadata = new Map();
-			allMetadata = new KlasSignal();
+			allMetadata = new RVSignal();
 			classMetadata = new StringMap();
 			fieldMetadata = new StringMap();
 			
@@ -203,7 +75,7 @@ abstract Signal<T0, T1, T2>(Map<T0, KlasSignal<T1, T2>>) from Map<T0, KlasSignal
 	/**
 	 * A callback which will be run on every class encountered.
 	 */
-	public static var allMetadata:KlasSignal<ClassType, Array<Field>>;
+	public static var allMetadata:RVSignal<ClassType, Array<Field>>;
 	
 	/**
 	 * A callback which will be run only when the specified metadata
