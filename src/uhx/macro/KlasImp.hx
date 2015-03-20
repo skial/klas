@@ -302,22 +302,22 @@ typedef TypeInfo = {
 	 * if the rebuilt type was successfull, `null` otherwise.
 	 */
 	@:access(haxe.macro.TypeTools)
-	public static function triggerRebuild(path:String, metadata:String, ?cls:ClassType, ?fields:Array<Field>):Null<TypeInfo> {
+	public static function triggerRebuild(path:String, metadata:String):Null<TypeInfo> {
 		var result = null;
 		
 		if (rebuild.exists( metadata ) && history.exists( path )) {
 			// Fetch the previous class and fields.
 			var cache = history.get( path );
-			
-			// Set `cls` and `fields` only if the cache exists.
-			if (cls == null && cache != null) cls = cache.type.getClass();
-			if (fields == null && cache != null) fields = cache.fields;
-			
 			var clsName = cache.original.pack.toDotPath( cache.original.name );
 			
-			if (cls != null && fields != null) {
+			if (cache.type.match(TInst(_, _)) && cache.fields != null) {
+				var cls = cache.type.getClass();
+				
+				// Check that the selected class has the required `metadata`.
+				if (!cls.meta.has( metadata )) return result;
+				
 				// Pass `cls` and `fields` to the retype handler to get a `typedefinition` back.
-				var td = rebuild.get( metadata )( cls, fields );
+				var td = rebuild.get( metadata )( cls, cache.fields );
 				
 				if (td == null) return result;
 				
@@ -341,8 +341,9 @@ typedef TypeInfo = {
 				// Add the "retyped" class into the current compile.
 				Context.defineType( td );
 				
-				// Cache the "retyped" fields in case of another "retype".
+				// Cache the "rebuilt" fields in case of another "rebuild".
 				cache.fields = td.fields;
+				// Update the current name
 				cache.current = { name: td.name, pack: td.pack };
 				
 				history.set( path, cache );

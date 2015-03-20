@@ -229,20 +229,20 @@ Otherwise it runs whenever it is called with `uhx.macro.KlasImp.triggerRebuild`.
 
 You can call these utility methods from your macro methods.
 
-1.	`uhx.macro.KlasImp.triggerRebuild(path:String, metadata:String, ?cls:ClassType, ?fields:Array<Field>):Null<TypeInfo>`. 
+1.	`KlasImp.triggerRebuild(path:String, metadata:String):Null<TypeInfo>`. 
 	Attempt to rebuild the type specified by `path` if it has matching`metadata`. 
 	If successfull, a `TypeInfo` object will be returned, otherwise `null` is returned.
 	
-2.	`uhx.macro.KlasImp.onRebuild:Signal1<TypeInfo>`. 
+2.	`KlasImp.onRebuild:Signal1<TypeInfo>`. 
 	A signal which will notify you when a type has been rebuilt.
 	
-3.	`uhx.macro.KlasImp.inspect(path:String, callback:Type->Array<Field>->Void):Bool`.
+3.	`KlasImp.inspect(path:String, callback:Type->Array<Field>->Void):Bool`.
 	Register a callback to be called when the specified `path` is detected.
 	
-4.	`uhx.macro.KlasImp.generateBefore(a:TypePath, b:TypePath):Void`.
+4.	`KlasImp.generateBefore(a:TypePath, b:TypePath):Void`.
 	Used to generate `a` before `b` in the output.
 
-5.	`uhx.macro.KlasImp.generateAfter(a:TypePath, b:TypePath):Void`.
+5.	`KlasImp.generateAfter(a:TypePath, b:TypePath):Void`.
 	Used to generate `a` after `b` in the output.
 
 ## Conditional Defines
