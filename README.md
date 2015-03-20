@@ -11,6 +11,8 @@ with Klas can be accessed with metadata.
 		<td><a href="#register-a-build-macro-with-klas">Register w/ Klas</a></td>
 		<td><a href="#build-hooks">Build Hooks</a></td>
 		<td><a href="#build-order">Build Order</a></td>
+	</tr>
+	<tr>
 		<td><a href="#utilities">Utilities</a></td>
 		<td><a href="#conditional-defines">Defines</a></td>
 		<td><a href="#example">Example</a></td>
