@@ -198,10 +198,9 @@ using haxe.macro.MacroStringTools;
 				
 				if (!cls.isInterface && !cls.isExtern && !cls.meta.has(':coreApi') && !cls.meta.has(':coreType') && !cls.meta.has(':KLAS_SKIP')) {
 					if (!fields.exists( function(f) return f.name == '__klasDependencies__' )) {
-						
 						fields = fields.concat( (macro class Temp {
 							@:skip @:ignore @:noCompletion @:noDebug @:noDoc 
-							public static var __klasDependencies__:Array<Class<Dynamic>> = uhx.macro.KlasImp.getDependencies( $v { key } );
+							public static var __klasDependencies__:std.Array<Class<Dynamic>> = uhx.macro.KlasImp.getDependencies( $v { key } );
 						}).fields );
 						
 					}
@@ -325,7 +324,7 @@ using haxe.macro.MacroStringTools;
 				
 				// If the TypeDefinition::name is the same as `cls.name`, modify it.
 				if (tdName == clsName) {
-					tdName = td.name += ('' + Date.now().getTime() + '' + (counter++)).replace('+', '_').replace('.', '_');
+					tdName = td.name += (counter++);
 					
 				}
 				
@@ -435,9 +434,9 @@ using haxe.macro.MacroStringTools;
 			switch (type) {
 				case TInst(r, p) if (r != null):
 					for (field in r.get().statics.get()) if (field.name == '__klasDependencies__') {
-						#if !klas_verbose
+						//#if !klas_verbose
 						field.meta.add( ':extern', [], field.pos );
-						#end
+						//#end
 						
 					}
 					
@@ -452,9 +451,9 @@ using haxe.macro.MacroStringTools;
 	 * Used internally by KlasImp.
 	 */
 	@:noCompletion
-	public static macro function getDependencies(key:String):Expr {
+	public static macro function getDependencies(key:String) {
 		var values = dependencyCache.get( key );
-		return values == null ? macro null : macro [$a { values }];
+		return values == null ? macro [] : macro $a{values};
 	}
 	
 }
