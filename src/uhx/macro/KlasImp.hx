@@ -329,6 +329,25 @@ using haxe.macro.MacroStringTools;
 					
 				}
 				
+				/*KlasImp.inspect( cache.current.pack.toDotPath( cache.current.name ), function(t, f) {
+					var cls = t.getClass();
+					if (cls.meta.has( ':native' )) {
+						cls.meta.remove( ':native' );
+					} else if (cache.current.pack.toDotPath( cache.current.name ) == cache.original.pack.toDotPath( cache.original.name )) {
+						var _td = macro class Temp {
+							public function new() {}
+							@:native('new') public function _new(empty:haxe.lang.EmptyObject) {}
+						}
+						_td.pack = cache.original.pack;
+						_td.name = cache.original.name + (counter++);
+						_td.fields = _td.fields.concat(f);
+						cls.meta.add( ':native', [macro $v { _td.pack.toDotPath( _td.name ) } ], cls.pos );
+						Context.defineType( _td );
+						//cls.meta.add( ':hxGen', [], cls.pos );
+						//cls.meta.add( ':nativeGen', [], cls.pos );
+					}
+				} );*/
+				
 				// Remove the previous class for the the current compile.
 				Compiler.exclude( cache.current.pack.toDotPath( cache.current.name ) );
 				// Add the "retyped" class into the current compile.
