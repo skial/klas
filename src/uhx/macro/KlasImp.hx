@@ -316,6 +316,7 @@ using haxe.macro.MacroStringTools;
 						
 					}
 					
+					// Save the rebuilt type.
 					var file = '$directory/${cls.name}.hx'.normalize();
 					var output = file.write(false);
 					output.writeString( printer.printTypeDefinition( td, true ) );
