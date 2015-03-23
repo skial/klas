@@ -21,6 +21,8 @@ import uhx.macro.klas.TypeInfo;
 
 using Lambda;
 using StringTools;
+using sys.io.File;
+using haxe.io.Path;
 using sys.FileSystem;
 using haxe.macro.TypeTools;
 using haxe.macro.ComplexTypeTools;
@@ -36,10 +38,11 @@ using haxe.macro.MacroStringTools;
 	
 	#if macro
 	private static var isSetup:Bool = false;
+	private static var postProcess:Bool = false;
 	
 	public static function initialize() {
 		if (isSetup == null || isSetup == false) {
-			// Initialize public hooks first.
+			// Initialize public hooks.
 			info = new StringMap();
 			rebuild = new StringMap();
 			inlineMetadata = new Map();
@@ -47,15 +50,29 @@ using haxe.macro.MacroStringTools;
 			classMetadata = new StringMap();
 			fieldMetadata = new StringMap();
 			
-			// Initialize internal variables
+			// Initialize internal variables.
 			history = new StringMap();
 			pendingInfo = new StringMap();
 			
-			dependencyCache = new StringMap();
-			
 			onRebuild = new Signal1();
 			
-			Context.onGenerate( KlasImp.onGenerate );
+			if (!Context.defined('display') && !Context.defined('klas_rebuild')) {
+				rebuildDirectory = '${Sys.getCwd()}/'.normalize();
+				
+				// Create `Sys.getCwd()/klas/gen/` if it does not exist.
+				for (directory in ['klas', 'gen']) if (!(rebuildDirectory = '$rebuildDirectory/$directory/'.normalize()).exists()) {
+					rebuildDirectory.createDirectory();
+					
+				}
+				
+				// Remove any previous files from the `klas/gen` directory.
+				// Attempting to remove a directory throws an error.
+				for (file in recurse( rebuildDirectory )) file.deleteFile();
+				
+				// Setup to recompile with modified classes.
+				Context.onAfterGenerate( compileAgain );
+				
+			}
 			
 			isSetup = true;
 		}
@@ -99,6 +116,8 @@ using haxe.macro.MacroStringTools;
 	 */
 	public static var rebuild:StringMap<ClassType->Array<Field>->Null<TypeDefinition>>;
 	
+	public static var rebuildDirectory:String;
+	
 	/**
 	 * A signal you can register with to get notified when types are rebuilt.
 	 */
@@ -128,8 +147,6 @@ using haxe.macro.MacroStringTools;
 	 */
 	private static var history:StringMap<TypeInfo>;
 	
-	private static var dependencyCache:StringMap<Array<Expr>>;
-	
 	/**
 	 * Called by KlasImp's `extraParams.hxml` file for globally applied
 	 * metadata.
@@ -137,8 +154,11 @@ using haxe.macro.MacroStringTools;
 	@:noCompletion
 	public static function inspection():Array<Field> {
 		initialize();
-		populateHistory( Context.getLocalType(), Context.getBuildFields() );
-		processHistory();
+		
+		if (!Context.defined('display')) {
+			populateHistory( Context.getLocalType(), Context.getBuildFields() );
+			processHistory();
+		}
 		
 		return Context.getBuildFields();
 	}
@@ -147,7 +167,7 @@ using haxe.macro.MacroStringTools;
 	 * Collect information on the current type.
 	 */
 	private static function populateHistory(type:Type, fields:Array<Field>):Void {
-		if (type != null && !history.exists( type.toString() )) {
+		if (!Context.defined('display') && type != null && !history.exists( type.toString() )) {
 			var parts = type.toString().split('.');
 			var typePath = { name: parts.pop(), pack: parts };
 			history.set( type.toString(), { type:type, fields:fields, original:typePath, current:typePath } );
@@ -161,7 +181,7 @@ using haxe.macro.MacroStringTools;
 	private static function processHistory():Void {
 		var _history = null;
 		
-		for (key in info.keys()) if (history.exists( key )) {
+		if (!Context.defined('display')) for (key in info.keys()) if (history.exists( key )) {
 			_history = history.get( key );
 			
 			// Process any pending calls.
@@ -179,39 +199,6 @@ using haxe.macro.MacroStringTools;
 			// All callbacks have been called, clear from the map.
 			info.remove( key );
 		}
-	}
-	
-	@:noCompletion
-	public static function dependency():Array<Field> {
-		var type = Context.getLocalType();
-		var fields = Context.getBuildFields();
-		var key = type.toString();
-		var cls = null;
-		
-		initialize();
-		populateHistory( type, fields );
-		processHistory();
-		
-		switch (type) {
-			case TInst(r, _) if (r != null):
-				var cls = r.get();
-				
-				if (!cls.isInterface && !cls.isExtern && !cls.meta.has(':coreApi') && !cls.meta.has(':coreType') && !cls.meta.has(':KLAS_SKIP')) {
-					if (!fields.exists( function(f) return f.name == '__klasDependencies__' )) {
-						fields = fields.concat( (macro class Temp {
-							@:skip @:ignore @:noCompletion @:noDebug @:noDoc 
-							public static var __klasDependencies__:std.Array<Class<Dynamic>> = uhx.macro.KlasImp.getDependencies( $v { key } );
-						}).fields );
-						
-					}
-					
-				}
-				
-			case _:
-				
-		}
-		
-		return fields;
 	}
 	
 	/**
@@ -264,7 +251,6 @@ using haxe.macro.MacroStringTools;
 			// First check the field's metadata for matches. 
 			// Passing along the class and matched field.
 			for (key in fieldMetadata.keys()) if (field.meta != null && field.meta.exists( function(m) return m.name == key )) {
-				//field = fieldMetadata.get( key )( cls, field );
 				field = fieldMetadata.dispatch( key, cls, field );
 				
 			}
@@ -274,7 +260,6 @@ using haxe.macro.MacroStringTools;
 			// Now check the stringified field for matching inline metadata.
 			// Passing along the class and matched field.
 			for (key in inlineMetadata.keys()) if (key.match( printed )) {
-				//field = inlineMetadata.get( key )( cls, field );
 				field = inlineMetadata.dispatch( key, cls, field );
 			}
 			
@@ -297,52 +282,63 @@ using haxe.macro.MacroStringTools;
 	public static function triggerRebuild(path:String, metadata:String):Null<TypeInfo> {
 		var result = null;
 		
-		if (rebuild.exists( metadata ) && history.exists( path )) {
-			// Fetch the previous class and fields.
-			var cache = history.get( path );
-			var clsName = cache.original.pack.toDotPath( cache.original.name );
-			
-			if (cache.type.match(TInst(_, _)) && cache.fields != null) {
-				var cls = cache.type.getClass();
+		if (!Context.defined('display') && !Context.defined('klas_rebuild')) {
+			if (rebuild.exists( metadata ) && history.exists( path )) {
+				// Fetch the previous class and fields.
+				var cache = history.get( path );
+				var clsName = cache.original.pack.toDotPath( cache.original.name );
 				
-				// Check that the selected class has the required `metadata`.
-				if (!cls.meta.has( metadata )) return result;
-				
-				// Pass `cls` and `fields` to the retype handler to get a `typedefinition` back.
-				var td = rebuild.get( metadata )( cls, cache.fields );
-				
-				if (td == null) return result;
-				
-				var tdName = td.pack.toDotPath( td.name );
-				var nativeF = metadataFilter.bind(_, ':native', clsName);
-				
-				// Check if `@:native('path.to.Class')` exists. Remove any found.
-				if (td.meta != null && td.meta.exists( nativeF )) for (m in td.meta.filter( nativeF )) td.meta.remove( m );
-				
-				// Add `@:native` and use the original package and type name.
-				td.meta.push( { name:':native', params:[macro $v { clsName } ], pos:cls.pos } );
-				
-				// If the TypeDefinition::name is the same as `cls.name`, modify it.
-				if (tdName == clsName) {
-					tdName = td.name += (counter++);
+				if (cache.type.match(TInst(_, _)) && cache.fields != null) {
+					var directory = rebuildDirectory;
+					var cls = cache.type.getClass();
+					
+					// Check that the selected class has the required `metadata`.
+					if (!cls.meta.has( metadata )) return result;
+					
+					// Pass `cls` and `fields` to the retype handler to get a `typedefinition` back.
+					var td = rebuild.get( metadata )( cls, cache.fields );
+					
+					if (td == null) return result;
+					
+					var tdName = td.pack.toDotPath( td.name );
+					
+					// Remove any KlasImp applied metadata.
+					for (meta in td.meta) if (meta.name == ':build') {
+						switch (meta.params[0]) {
+							case macro uhx.macro.KlasImp.inspection():
+								td.meta.remove( meta );
+								
+							case _:
+								
+						}
+						
+					}
+					
+					// Create the package for this type in the Klas generated class path.
+					for (path in td.pack) if (!(directory = '$directory/$path'.normalize()).exists()) {
+						directory.createDirectory();
+						
+					}
+					
+					// Save the rebuilt type.
+					var file = '$directory/${cls.name}.hx'.normalize();
+					var output = file.write(false);
+					output.writeString( printer.printTypeDefinition( td, true ) );
+					output.flush();
+					output.close();
+					
+					// Cache the "rebuilt" fields in case of another "rebuild".
+					cache.fields = td.fields;
+					// Update the current name
+					cache.current = { name: td.name, pack: td.pack };
+					
+					history.set( path, cache );
+					
+					result = cache;
+					postProcess = true;
+					onRebuild.dispatch( cache );
 					
 				}
-				
-				// Remove the previous class for the the current compile.
-				Compiler.exclude( cache.current.pack.toDotPath( cache.current.name ) );
-				// Add the "retyped" class into the current compile.
-				Context.defineType( td );
-				
-				// Cache the "rebuilt" fields in case of another "rebuild".
-				cache.fields = td.fields;
-				// Update the current name
-				cache.current = { name: td.name, pack: td.pack };
-				
-				history.set( path, cache );
-				
-				result = cache;
-				
-				onRebuild.dispatch( cache );
 				
 			}
 			
@@ -391,35 +387,26 @@ using haxe.macro.MacroStringTools;
 		return result;
 	}
 	
-	/**
-	 * Generate `a` before `b`.
-	 */
-	public static function generateBefore(a:TypePath, b:TypePath):Void {
-		var aname = a.pack.toDotPath( a.name );
-		var bname = b.pack.toDotPath( b.name );
-		
-		var values = dependencyCache.exists( bname ) ? dependencyCache.get( bname ) : [];
-		values.push( macro $p { a.pack.concat( [a.name] ) } );
-		
-		dependencyCache.set( bname, values );
-
-	}
-	
-	/**
-	 * Generate `a` after `b`.
-	 */
-	public static function generateAfter(a:TypePath, b:TypePath):Void {
-		var aname = a.pack.toDotPath( a.name );
-		var bname = b.pack.toDotPath( b.name );
-		
-		var values = dependencyCache.exists( aname ) ? dependencyCache.get( aname ) : [];
-		values.push( macro $p { b.pack.concat( [b.name] ) } );
-		
-		dependencyCache.set( aname, values );
-	}
-	
 	private static function metadataFilter(meta:MetadataEntry, tag:String, pack:String):Bool {
 		return meta.name == tag && printer.printExprs( meta.params, '.' ).indexOf( pack ) > -1;
+	}
+	
+	/**
+	 * Return a list of files contained within the `path`.
+	 */
+	private static function recurse(path:String) {
+		var results = [];
+		path = path.normalize();
+		if (path.isDirectory()) for (directory in path.readDirectory()) {
+			var current = '$path/$directory/'.normalize();
+			if (current.isDirectory()) {
+				results = results.concat( recurse( current ) );
+			} else {
+				results.push( current );
+			}
+		}
+		
+		return results;
 	}
 	
 	private static inline function log(value:String):Void {
@@ -428,32 +415,24 @@ using haxe.macro.MacroStringTools;
 		#end
 	}
 	
-	private static function onGenerate(types:Array<Type>):Void {
-		for (type in types) {
-			// Prevent `__klasDependencies__` being included in the output.
-			switch (type) {
-				case TInst(r, p) if (r != null):
-					for (field in r.get().statics.get()) if (field.name == '__klasDependencies__') {
-						//#if !klas_verbose
-						field.meta.add( ':extern', [], field.pos );
-						//#end
-						
-					}
-					
-				case _:
-					
-			}
+	/**
+	 * Run the Haxe compiler _again_, but pointing to the rebuilt modules
+	 * directory which overrides the user's classes.
+	 */
+	private static function compileAgain():Void {
+		if (!Context.defined('display') && !Context.defined('klas_rebuild') && postProcess) {
+			Sys.println('----- Rerunning Haxe with your rebuilt types -----');
+			var process = new Process('haxe', Sys.args().concat( ['-cp', rebuildDirectory, '-D', 'klas_rebuild'] ) );
+			process.exitCode();
+			#if klas_verbose
+			trace( process.stdout.readAll() );
+			trace( process.stderr.readAll() );
+			#end
+			Sys.println('----- Finished -----');
+			process.close();
+			
 		}
 	}
 	#end
-	
-	/**
-	 * Used internally by KlasImp.
-	 */
-	@:noCompletion
-	public static macro function getDependencies(key:String) {
-		var values = dependencyCache.get( key );
-		return values == null ? macro [] : macro $a{values};
-	}
 	
 }

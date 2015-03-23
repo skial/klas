@@ -21,6 +21,8 @@ with Klas can be accessed with metadata.
 	</tr>
 </table>
 
+> You can find more information on [how klas works](#how-klas-works) at the end of the README.
+
 ## Installation
 
 With haxelib git.
@@ -238,12 +240,6 @@ You can call these utility methods from your macro methods.
 	
 3.	`KlasImp.inspect(path:String, callback:Type->Array<Field>->Void):Bool`.
 	Register a callback to be called when the specified `path` is detected.
-	
-4.	`KlasImp.generateBefore(a:TypePath, b:TypePath):Void`.
-	Used to generate `a` before `b` in the output.
-
-5.	`KlasImp.generateAfter(a:TypePath, b:TypePath):Void`.
-	Used to generate `a` after `b` in the output.
 
 ## Conditional Defines
 
@@ -251,6 +247,8 @@ Add the following defines to your `hxml` file.
 
 1.	`-D klas_verbose`. Setting this will leave certain utility fields in your output and
 	print debug information to your terminal.
+	
+2.	`-D klas_rebuild`. Used internally when types have been rebuilt.
 
 ## Metadata
 
@@ -305,3 +303,29 @@ The following `initialize`, `build` and `handler` methods are taken from [Wait.h
 4.	[named](https://github.com/skial/named)
 5.	[seri](https://github.com/skial/seri)
 6.	[3rd_klas](https://github.com/skial/3rd_klas)
+	
+## How Klas Works
+
+##### How `inspect` works
+
+Klas adds one build macro to every single type which gets initialized via 
+its [extraParams.hxml](https://github.com/skial/klas/blob/master/extraParams.hxml)
+file. This `KlasImp.inspection` build macro allows Klas
+to gather information about all types which is later available via `KlasImp.inspect`.
+
+##### How `rebuild` works
+
+You can _rebuild_ a type by calling `KlasImp.rebuild`. In this method
+Klas checks that its details have been gathered and the metadata you
+specified exists. It then passes all the information about the type to a 
+pre registered callback and expects to receive a `TypeDefintion` object back.
+
+Klas then saves this `TypeDefinition` object to `$cwd/klas/gen/`, reconstructing
+the types package. For example, rebuilding a type called `a.b.Test` will save the
+rebuilt type to `$cwd/klas/gen/a/b/Test.hx`. At the end of compiling,
+Klas re-invokes the compiler with the same arguments you compiled with
+but with the additional arguments `-cp $cwd/klas/gen/` and `-D klas_rebuild`.
+
+This is currently the only cross platform, target independant way to rebuild
+a type where a combination of initialization macros, build macros, generic macros 
+and macro methods are just not enough to achieve your goal.
