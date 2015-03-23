@@ -54,8 +54,6 @@ using haxe.macro.MacroStringTools;
 			history = new StringMap();
 			pendingInfo = new StringMap();
 			
-			dependencyCache = new StringMap();
-			
 			onRebuild = new Signal1();
 			
 			if (!Context.defined('display') && !Context.defined('klas_rebuild')) {
@@ -75,8 +73,6 @@ using haxe.macro.MacroStringTools;
 				Context.onAfterGenerate( compileAgain );
 				
 			}
-			
-			if (!Context.defined('display')) Context.onGenerate( KlasImp.onGenerate );
 			
 			isSetup = true;
 		}
@@ -151,8 +147,6 @@ using haxe.macro.MacroStringTools;
 	 */
 	private static var history:StringMap<TypeInfo>;
 	
-	private static var dependencyCache:StringMap<Array<Expr>>;
-	
 	/**
 	 * Called by KlasImp's `extraParams.hxml` file for globally applied
 	 * metadata.
@@ -206,43 +200,6 @@ using haxe.macro.MacroStringTools;
 			// All callbacks have been called, clear from the map.
 			info.remove( key );
 		}
-	}
-	
-	@:noCompletion
-	public static function dependency():Array<Field> {
-		var type = Context.getLocalType();
-		var fields = Context.getBuildFields();
-		var key = type.toString();
-		var cls = null;
-		
-		initialize();
-		
-		if (!Context.defined('display')) {
-			populateHistory( type, fields );
-			processHistory();
-			
-			switch (type) {
-				case TInst(r, _) if (r != null):
-					var cls = r.get();
-					
-					if (!cls.isInterface && !cls.isExtern && !cls.meta.has(':coreApi') && !cls.meta.has(':coreType') && !cls.meta.has(':KLAS_SKIP')) {
-						if (!fields.exists( function(f) return f.name == '__klasDependencies__' )) {
-							fields = fields.concat( (macro class Temp {
-								@:skip @:ignore @:noCompletion @:noDebug @:noDoc 
-								public static var __klasDependencies__:std.Array<Class<Dynamic>> = uhx.macro.KlasImp.getDependencies( $v { key } );
-							}).fields );
-							
-						}
-						
-					}
-					
-				case _:
-					
-			}
-			
-		}
-		
-		return fields;
 	}
 	
 	/**
@@ -425,33 +382,6 @@ using haxe.macro.MacroStringTools;
 		return result;
 	}
 	
-	/**
-	 * Generate `a` before `b`.
-	 */
-	public static function generateBefore(a:TypePath, b:TypePath):Void {
-		var aname = a.pack.toDotPath( a.name );
-		var bname = b.pack.toDotPath( b.name );
-		
-		var values = dependencyCache.exists( bname ) ? dependencyCache.get( bname ) : [];
-		values.push( macro $p { a.pack.concat( [a.name] ) } );
-		
-		dependencyCache.set( bname, values );
-
-	}
-	
-	/**
-	 * Generate `a` after `b`.
-	 */
-	public static function generateAfter(a:TypePath, b:TypePath):Void {
-		var aname = a.pack.toDotPath( a.name );
-		var bname = b.pack.toDotPath( b.name );
-		
-		var values = dependencyCache.exists( aname ) ? dependencyCache.get( aname ) : [];
-		values.push( macro $p { b.pack.concat( [b.name] ) } );
-		
-		dependencyCache.set( aname, values );
-	}
-	
 	private static function metadataFilter(meta:MetadataEntry, tag:String, pack:String):Bool {
 		return meta.name == tag && printer.printExprs( meta.params, '.' ).indexOf( pack ) > -1;
 	}
@@ -480,22 +410,6 @@ using haxe.macro.MacroStringTools;
 		#end
 	}
 	
-	private static function onGenerate(types:Array<Type>):Void {
-		for (type in types) {
-			// Prevent `__klasDependencies__` being included in the output.
-			switch (type) {
-				case TInst(r, p) if (r != null):
-					for (field in r.get().statics.get()) if (field.name == '__klasDependencies__') {
-						field.meta.add( ':extern', [], field.pos );
-						
-					}
-					
-				case _:
-					
-			}
-		}
-	}
-	
 	/**
 	 * Run the Haxe compiler _again_, but pointing to the rebuilt modules
 	 * directory which overrides the user's classes.
@@ -509,14 +423,5 @@ using haxe.macro.MacroStringTools;
 		}
 	}
 	#end
-	
-	/**
-	 * Used internally by KlasImp.
-	 */
-	@:noCompletion
-	public static macro function getDependencies(key:String) {
-		var values = dependencyCache.get( key );
-		return values == null ? macro [] : macro $a{values};
-	}
 	
 }
