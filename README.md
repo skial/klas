@@ -251,6 +251,8 @@ Add the following defines to your `hxml` file.
 
 1.	`-D klas_verbose`. Setting this will leave certain utility fields in your output and
 	print debug information to your terminal.
+	
+2.	`-D klas_rebuild`. Used internally when types have been rebuilt.
 
 ## Metadata
 
