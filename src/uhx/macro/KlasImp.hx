@@ -421,12 +421,14 @@ using haxe.macro.MacroStringTools;
 	 */
 	private static function compileAgain():Void {
 		if (!Context.defined('display') && !Context.defined('klas_rebuild') && postProcess) {
+			Sys.println('----- Rerunning Haxe with your rebuilt types -----');
 			var process = new Process('haxe', Sys.args().concat( ['-cp', rebuildDirectory, '-D', 'klas_rebuild'] ) );
 			process.exitCode();
 			#if klas_verbose
 			trace( process.stdout.readAll() );
 			trace( process.stderr.readAll() );
 			#end
+			Sys.println('----- Finished -----');
 			process.close();
 			
 		}
