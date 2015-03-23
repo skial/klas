@@ -158,7 +158,6 @@ using haxe.macro.MacroStringTools;
 		if (!Context.defined('display')) {
 			populateHistory( Context.getLocalType(), Context.getBuildFields() );
 			processHistory();
-			
 		}
 		
 		return Context.getBuildFields();
@@ -302,13 +301,18 @@ using haxe.macro.MacroStringTools;
 					if (td == null) return result;
 					
 					var tdName = td.pack.toDotPath( td.name );
-					var nativeF = metadataFilter.bind(_, ':native', clsName);
 					
-					// Check if `@:native('path.to.Class')` exists. Remove any found.
-					if (td.meta != null && td.meta.exists( nativeF )) for (m in td.meta.filter( nativeF )) td.meta.remove( m );
-					
-					// Add `@:native` and use the original package and type name.
-					td.meta.push( { name:':native', params:[macro $v { clsName } ], pos:cls.pos } );
+					// Remove any KlasImp applied metadata.
+					for (meta in td.meta) if (meta.name == ':build') {
+						switch (meta.params[0]) {
+							case macro uhx.macro.KlasImp.inspection():
+								td.meta.remove( meta );
+								
+							case _:
+								
+						}
+						
+					}
 					
 					// Create the package for this type in the Klas generated class path.
 					for (path in td.pack) if (!(directory = '$directory/$path'.normalize()).exists()) {
@@ -419,6 +423,10 @@ using haxe.macro.MacroStringTools;
 		if (!Context.defined('display') && !Context.defined('klas_rebuild') && postProcess) {
 			var process = new Process('haxe', Sys.args().concat( ['-cp', rebuildDirectory, '-D', 'klas_rebuild'] ) );
 			process.exitCode();
+			#if klas_verbose
+			trace( process.stdout.readAll() );
+			trace( process.stderr.readAll() );
+			#end
 			process.close();
 			
 		}
