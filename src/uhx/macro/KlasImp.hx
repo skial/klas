@@ -21,6 +21,8 @@ import uhx.macro.klas.TypeInfo;
 
 using Lambda;
 using StringTools;
+using sys.io.File;
+using haxe.io.Path;
 using sys.FileSystem;
 using haxe.macro.TypeTools;
 using haxe.macro.ComplexTypeTools;
@@ -39,7 +41,7 @@ using haxe.macro.MacroStringTools;
 	
 	public static function initialize() {
 		if (isSetup == null || isSetup == false) {
-			// Initialize public hooks first.
+			// Initialize public hooks.
 			info = new StringMap();
 			rebuild = new StringMap();
 			inlineMetadata = new Map();
@@ -47,7 +49,7 @@ using haxe.macro.MacroStringTools;
 			classMetadata = new StringMap();
 			fieldMetadata = new StringMap();
 			
-			// Initialize internal variables
+			// Initialize internal variables.
 			history = new StringMap();
 			pendingInfo = new StringMap();
 			
@@ -55,7 +57,25 @@ using haxe.macro.MacroStringTools;
 			
 			onRebuild = new Signal1();
 			
-			Context.onGenerate( KlasImp.onGenerate );
+			if (!Context.defined('display') && !Context.defined('klas_rebuild')) {
+				rebuildDirectory = '${Sys.getCwd()}/'.normalize();
+				
+				// Create `Sys.getCwd()/klas/gen/` if it does not exist.
+				for (directory in ['klas', 'gen']) if (!(rebuildDirectory = '$rebuildDirectory/$directory/'.normalize()).exists()) {
+					rebuildDirectory.createDirectory();
+					
+				}
+				
+				// Remove any previous files from the `klas/gen` directory.
+				// Attempting to remove a directory throws an error.
+				for (file in recurse( rebuildDirectory )) file.deleteFile();
+				
+				// Setup to recompile with modified classes.
+				Context.onAfterGenerate( compileAgain );
+				
+			}
+			
+			if (!Context.defined('display')) Context.onGenerate( KlasImp.onGenerate );
 			
 			isSetup = true;
 		}
@@ -99,6 +119,8 @@ using haxe.macro.MacroStringTools;
 	 */
 	public static var rebuild:StringMap<ClassType->Array<Field>->Null<TypeDefinition>>;
 	
+	public static var rebuildDirectory:String;
+	
 	/**
 	 * A signal you can register with to get notified when types are rebuilt.
 	 */
@@ -137,8 +159,12 @@ using haxe.macro.MacroStringTools;
 	@:noCompletion
 	public static function inspection():Array<Field> {
 		initialize();
-		populateHistory( Context.getLocalType(), Context.getBuildFields() );
-		processHistory();
+		
+		if (!Context.defined('display')) {
+			populateHistory( Context.getLocalType(), Context.getBuildFields() );
+			processHistory();
+			
+		}
 		
 		return Context.getBuildFields();
 	}
@@ -147,7 +173,7 @@ using haxe.macro.MacroStringTools;
 	 * Collect information on the current type.
 	 */
 	private static function populateHistory(type:Type, fields:Array<Field>):Void {
-		if (type != null && !history.exists( type.toString() )) {
+		if (!Context.defined('display') && type != null && !history.exists( type.toString() )) {
 			var parts = type.toString().split('.');
 			var typePath = { name: parts.pop(), pack: parts };
 			history.set( type.toString(), { type:type, fields:fields, original:typePath, current:typePath } );
@@ -161,7 +187,7 @@ using haxe.macro.MacroStringTools;
 	private static function processHistory():Void {
 		var _history = null;
 		
-		for (key in info.keys()) if (history.exists( key )) {
+		if (!Context.defined('display')) for (key in info.keys()) if (history.exists( key )) {
 			_history = history.get( key );
 			
 			// Process any pending calls.
@@ -189,26 +215,30 @@ using haxe.macro.MacroStringTools;
 		var cls = null;
 		
 		initialize();
-		populateHistory( type, fields );
-		processHistory();
 		
-		switch (type) {
-			case TInst(r, _) if (r != null):
-				var cls = r.get();
-				
-				if (!cls.isInterface && !cls.isExtern && !cls.meta.has(':coreApi') && !cls.meta.has(':coreType') && !cls.meta.has(':KLAS_SKIP')) {
-					if (!fields.exists( function(f) return f.name == '__klasDependencies__' )) {
-						fields = fields.concat( (macro class Temp {
-							@:skip @:ignore @:noCompletion @:noDebug @:noDoc 
-							public static var __klasDependencies__:std.Array<Class<Dynamic>> = uhx.macro.KlasImp.getDependencies( $v { key } );
-						}).fields );
+		if (!Context.defined('display')) {
+			populateHistory( type, fields );
+			processHistory();
+			
+			switch (type) {
+				case TInst(r, _) if (r != null):
+					var cls = r.get();
+					
+					if (!cls.isInterface && !cls.isExtern && !cls.meta.has(':coreApi') && !cls.meta.has(':coreType') && !cls.meta.has(':KLAS_SKIP')) {
+						if (!fields.exists( function(f) return f.name == '__klasDependencies__' )) {
+							fields = fields.concat( (macro class Temp {
+								@:skip @:ignore @:noCompletion @:noDebug @:noDoc 
+								public static var __klasDependencies__:std.Array<Class<Dynamic>> = uhx.macro.KlasImp.getDependencies( $v { key } );
+							}).fields );
+							
+						}
 						
 					}
 					
-				}
-				
-			case _:
-				
+				case _:
+					
+			}
+			
 		}
 		
 		return fields;
@@ -264,7 +294,6 @@ using haxe.macro.MacroStringTools;
 			// First check the field's metadata for matches. 
 			// Passing along the class and matched field.
 			for (key in fieldMetadata.keys()) if (field.meta != null && field.meta.exists( function(m) return m.name == key )) {
-				//field = fieldMetadata.get( key )( cls, field );
 				field = fieldMetadata.dispatch( key, cls, field );
 				
 			}
@@ -274,7 +303,6 @@ using haxe.macro.MacroStringTools;
 			// Now check the stringified field for matching inline metadata.
 			// Passing along the class and matched field.
 			for (key in inlineMetadata.keys()) if (key.match( printed )) {
-				//field = inlineMetadata.get( key )( cls, field );
 				field = inlineMetadata.dispatch( key, cls, field );
 			}
 			
@@ -297,71 +325,57 @@ using haxe.macro.MacroStringTools;
 	public static function triggerRebuild(path:String, metadata:String):Null<TypeInfo> {
 		var result = null;
 		
-		if (rebuild.exists( metadata ) && history.exists( path )) {
-			// Fetch the previous class and fields.
-			var cache = history.get( path );
-			var clsName = cache.original.pack.toDotPath( cache.original.name );
-			
-			if (cache.type.match(TInst(_, _)) && cache.fields != null) {
-				var cls = cache.type.getClass();
+		if (!Context.defined('display') && !Context.defined('klas_rebuild')) {
+			if (rebuild.exists( metadata ) && history.exists( path )) {
+				// Fetch the previous class and fields.
+				var cache = history.get( path );
+				var clsName = cache.original.pack.toDotPath( cache.original.name );
 				
-				// Check that the selected class has the required `metadata`.
-				if (!cls.meta.has( metadata )) return result;
-				
-				// Pass `cls` and `fields` to the retype handler to get a `typedefinition` back.
-				var td = rebuild.get( metadata )( cls, cache.fields );
-				
-				if (td == null) return result;
-				
-				var tdName = td.pack.toDotPath( td.name );
-				var nativeF = metadataFilter.bind(_, ':native', clsName);
-				
-				// Check if `@:native('path.to.Class')` exists. Remove any found.
-				if (td.meta != null && td.meta.exists( nativeF )) for (m in td.meta.filter( nativeF )) td.meta.remove( m );
-				
-				// Add `@:native` and use the original package and type name.
-				td.meta.push( { name:':native', params:[macro $v { clsName } ], pos:cls.pos } );
-				
-				// If the TypeDefinition::name is the same as `cls.name`, modify it.
-				if (tdName == clsName) {
-					tdName = td.name += (counter++);
+				if (cache.type.match(TInst(_, _)) && cache.fields != null) {
+					var directory = rebuildDirectory;
+					var cls = cache.type.getClass();
+					
+					// Check that the selected class has the required `metadata`.
+					if (!cls.meta.has( metadata )) return result;
+					
+					// Pass `cls` and `fields` to the retype handler to get a `typedefinition` back.
+					var td = rebuild.get( metadata )( cls, cache.fields );
+					
+					if (td == null) return result;
+					
+					var tdName = td.pack.toDotPath( td.name );
+					var nativeF = metadataFilter.bind(_, ':native', clsName);
+					
+					// Check if `@:native('path.to.Class')` exists. Remove any found.
+					if (td.meta != null && td.meta.exists( nativeF )) for (m in td.meta.filter( nativeF )) td.meta.remove( m );
+					
+					// Add `@:native` and use the original package and type name.
+					td.meta.push( { name:':native', params:[macro $v { clsName } ], pos:cls.pos } );
+					
+					// Create the package for this type in the Klas generated class path.
+					for (path in td.pack) if (!(directory = '$directory/$path'.normalize()).exists()) {
+						directory.createDirectory();
+						
+					}
+					
+					var file = '$directory/${cls.name}.hx'.normalize();
+					var output = file.write(false);
+					output.writeString( printer.printTypeDefinition( td, true ) );
+					output.flush();
+					output.close();
+					
+					// Cache the "rebuilt" fields in case of another "rebuild".
+					cache.fields = td.fields;
+					// Update the current name
+					cache.current = { name: td.name, pack: td.pack };
+					
+					history.set( path, cache );
+					
+					result = cache;
+					
+					onRebuild.dispatch( cache );
 					
 				}
-				
-				/*KlasImp.inspect( cache.current.pack.toDotPath( cache.current.name ), function(t, f) {
-					var cls = t.getClass();
-					if (cls.meta.has( ':native' )) {
-						cls.meta.remove( ':native' );
-					} else if (cache.current.pack.toDotPath( cache.current.name ) == cache.original.pack.toDotPath( cache.original.name )) {
-						var _td = macro class Temp {
-							public function new() {}
-							@:native('new') public function _new(empty:haxe.lang.EmptyObject) {}
-						}
-						_td.pack = cache.original.pack;
-						_td.name = cache.original.name + (counter++);
-						_td.fields = _td.fields.concat(f);
-						cls.meta.add( ':native', [macro $v { _td.pack.toDotPath( _td.name ) } ], cls.pos );
-						Context.defineType( _td );
-						//cls.meta.add( ':hxGen', [], cls.pos );
-						//cls.meta.add( ':nativeGen', [], cls.pos );
-					}
-				} );*/
-				
-				// Remove the previous class for the the current compile.
-				Compiler.exclude( cache.current.pack.toDotPath( cache.current.name ) );
-				// Add the "retyped" class into the current compile.
-				Context.defineType( td );
-				
-				// Cache the "rebuilt" fields in case of another "rebuild".
-				cache.fields = td.fields;
-				// Update the current name
-				cache.current = { name: td.name, pack: td.pack };
-				
-				history.set( path, cache );
-				
-				result = cache;
-				
-				onRebuild.dispatch( cache );
 				
 			}
 			
@@ -441,6 +455,24 @@ using haxe.macro.MacroStringTools;
 		return meta.name == tag && printer.printExprs( meta.params, '.' ).indexOf( pack ) > -1;
 	}
 	
+	/**
+	 * Return a list of files contained within the `path`.
+	 */
+	private static function recurse(path:String) {
+		var results = [];
+		path = path.normalize();
+		if (path.isDirectory()) for (directory in path.readDirectory()) {
+			var current = '$path/$directory/'.normalize();
+			if (current.isDirectory()) {
+				results = results.concat( recurse( current ) );
+			} else {
+				results.push( current );
+			}
+		}
+		
+		return results;
+	}
+	
 	private static inline function log(value:String):Void {
 		#if klas_verbose
 		Sys.println( value );
@@ -453,15 +485,26 @@ using haxe.macro.MacroStringTools;
 			switch (type) {
 				case TInst(r, p) if (r != null):
 					for (field in r.get().statics.get()) if (field.name == '__klasDependencies__') {
-						//#if !klas_verbose
 						field.meta.add( ':extern', [], field.pos );
-						//#end
 						
 					}
 					
 				case _:
 					
 			}
+		}
+	}
+	
+	/**
+	 * Run the Haxe compiler _again_, but pointing to the rebuilt modules
+	 * directory which overrides the user's classes.
+	 */
+	private static function compileAgain():Void {
+		if (!Context.defined('display') && !Context.defined('klas_rebuild')) {
+			var process = new Process('haxe', Sys.args().concat( ['-cp', rebuildDirectory, '-D', 'klas_rebuild'] ) );
+			process.exitCode();
+			process.close();
+			
 		}
 	}
 	#end
