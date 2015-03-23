@@ -307,3 +307,9 @@ The following `initialize`, `build` and `handler` methods are taken from [Wait.h
 4.	[named](https://github.com/skial/named)
 5.	[seri](https://github.com/skial/seri)
 6.	[3rd_klas](https://github.com/skial/3rd_klas)
+	
+## How Klas Works
+
+Klas adds one build macro to every single type which get initialized via 
+its `extraParams.hxml` file. This build macro allows Klas
+to gather information which is later available via `KlasImp.inspect`.
