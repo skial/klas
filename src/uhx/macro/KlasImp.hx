@@ -38,6 +38,7 @@ using haxe.macro.MacroStringTools;
 	
 	#if macro
 	private static var isSetup:Bool = false;
+	private static var postProcess:Bool = false;
 	
 	public static function initialize() {
 		if (isSetup == null || isSetup == false) {
@@ -372,7 +373,7 @@ using haxe.macro.MacroStringTools;
 					history.set( path, cache );
 					
 					result = cache;
-					
+					postProcess = true;
 					onRebuild.dispatch( cache );
 					
 				}
@@ -500,7 +501,7 @@ using haxe.macro.MacroStringTools;
 	 * directory which overrides the user's classes.
 	 */
 	private static function compileAgain():Void {
-		if (!Context.defined('display') && !Context.defined('klas_rebuild')) {
+		if (!Context.defined('display') && !Context.defined('klas_rebuild') && postProcess) {
 			var process = new Process('haxe', Sys.args().concat( ['-cp', rebuildDirectory, '-D', 'klas_rebuild'] ) );
 			process.exitCode();
 			process.close();
