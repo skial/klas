@@ -79,7 +79,7 @@ the hook after the line `KlasImp.initialize()` in your `initialize` method.
 
 1.	The `info` string map allows you to register a callback which allows you to
 	inspect the `Type` and its build fields if the `Type` has any. The
-	string map key should be the path to the type you are interest in and your
+	string map key should be the path to the type you are interested in and your
 	handler type should be `Array<Type->Array<Field>->Void>`.
 	```Haxe
 	// Hooking into Klas.
