@@ -77,7 +77,7 @@ To add your build macro to Klas you need to do two things.
 Klas provides the following hooks/variables you can register with. You would place
 the hook after the line `KlasImp.initialize()` in your `initialize` method.
 
-1.	The `info` string map allows your to register a callback which allows you to
+1.	The `info` string map allows you to register a callback which allows you to
 	inspect the `Type` and its build fields if the `Type` has any. The
 	string map key should be the path to the type you are interest in and your
 	handler type should be `Array<Type->Array<Field>->Void>`.
