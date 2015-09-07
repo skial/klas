@@ -107,7 +107,7 @@ using haxe.macro.MacroStringTools;
 	 * A callback which will be run only when the specified metadata
 	 * has been found on a abstract.
 	 */
-	public static var abstractMetadata:Signal<String, TAbstract, Array<Field>>;
+	public static var abstractMetadata:Signal<String, AbstractType, Array<Field>>;
 	
 	/**
 	 * A callback which will be run only when the specified metadata
