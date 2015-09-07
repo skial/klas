@@ -24,6 +24,7 @@ using StringTools;
 using sys.io.File;
 using haxe.io.Path;
 using sys.FileSystem;
+using uhx.macro.KlasImp;
 using haxe.macro.TypeTools;
 using haxe.macro.ComplexTypeTools;
 using haxe.macro.MacroStringTools;
@@ -87,11 +88,32 @@ using haxe.macro.MacroStringTools;
 	 */
 	public static var allMetadata:RVSignal<ClassType, Array<Field>>;
 	
+	public static var anyClass:RVSignal<ClassType, Array<Field>>;
+	public static var anyEnum:RVSignal<EnumType, Array<Field>>;
+	
 	/**
 	 * A callback which will be run only when the specified metadata
 	 * has been found on a class.
 	 */
 	public static var classMetadata:Signal<String, ClassType, Array<Field>>;
+	
+	/**
+	 * A callback which will be run only when the specified metadata
+	 * has been found on a enum.
+	 */
+	public static var enumMetadata:Signal<String, EnumType, Array<Field>>;
+	
+	/**
+	 * A callback which will be run only when the specified metadata
+	 * has been found on a abstract.
+	 */
+	public static var abstractMetadata:Signal<String, TAbstract, Array<Field>>;
+	
+	/**
+	 * A callback which will be run only when the specified metadata
+	 * has been found on a typedef.
+	 */
+	public static var typedefMetadata:Signal<String, AnonType, Array<Field>>;
 	
 	/**
 	 * A callback which will be run only when the specified metadata
@@ -199,6 +221,68 @@ using haxe.macro.MacroStringTools;
 			// All callbacks have been called, clear from the map.
 			info.remove( key );
 		}
+	}
+	
+	@:noCompletion
+	public static function handler(?isGlobal:Bool = false):Array<Field> {
+		var type = Context.getLocalType();
+		var fields = Context.getBuildFields();
+		var moduleTypes = try Context.getModule( type.toString() ) catch (e:Dynamic) [];
+		
+		
+		
+		return type == null ? fields : process( type, fields );
+	}
+	
+	private static function process(type:Type, fields:Array<Field>):Array<Field> {
+		initialize();
+		
+		populateHistory( type, fields );
+		processHistory();
+		
+		/**
+		 * Process matchting metadata signals.
+		 */
+		switch (type) {
+			case TEnum(_.get() => t, _) if (!t.skip()):
+				for (key in enumMetadata.keys()) if (t.meta.has( key )) {
+					fields = enumMetadata.dispatch( key, t, fields );
+				}
+				
+			case TInst(_.get() => t, _) if (!t.skip()):
+				for (key in classMetadata.keys()) if (t.meta.has( key )) {
+					fields = classMetadata.dispatch( key, t, fields );
+				}
+				
+			//case TAbstract(_.get() => t, _) if (!t.skip()):
+				
+				
+			case _:
+				
+		}
+		
+		/**
+		 * Process the `any*` signals last.
+		 */
+		switch (type) {
+			case TEnum(_.get() => t, _) if (!t.skip()):
+				fields = anyEnum.dispatch( t, fields );
+				
+			case TInst(_.get() => t, _) if (!t.skip()):
+				fields = anyClass.dispatch( t, fields );
+				
+			//case TAbstract(_.get() => t, _) if (!t.skip()):
+				
+				
+			case _:
+				
+		}
+		
+		return fields;
+	}
+	
+	private static inline function skip(type:BaseType):Bool {
+		return type.meta.has( ':KLAS_SKIP' );
 	}
 	
 	/**
