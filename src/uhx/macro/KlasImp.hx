@@ -46,8 +46,11 @@ using haxe.macro.MacroStringTools;
 			// Initialize public hooks.
 			info = new StringMap();
 			rebuild = new StringMap();
+			anyEnum = new RVSignal();
+			anyClass = new RVSignal();
 			inlineMetadata = new Map();
 			allMetadata = new RVSignal();
+			enumMetadata = new StringMap();
 			classMetadata = new StringMap();
 			fieldMetadata = new StringMap();
 			
@@ -227,9 +230,9 @@ using haxe.macro.MacroStringTools;
 	public static function handler(?isGlobal:Bool = false):Array<Field> {
 		var type = Context.getLocalType();
 		var fields = Context.getBuildFields();
-		var moduleTypes = try Context.getModule( type.toString() ) catch (e:Dynamic) [];
 		
-		
+		// The following breaks afew classes... TODO FIX
+		//var moduleTypes = try Context.getModule( type.toString() ) catch (e:Dynamic) [];
 		
 		return type == null ? fields : process( type, fields );
 	}
@@ -239,17 +242,23 @@ using haxe.macro.MacroStringTools;
 		
 		populateHistory( type, fields );
 		processHistory();
+		trace( type );
+		var underlying:Null<Dynamic> = null;
 		
 		/**
 		 * Process matchting metadata signals.
 		 */
 		switch (type) {
 			case TEnum(_.get() => t, _) if (!t.skip()):
+				underlying = t;
+				
 				for (key in enumMetadata.keys()) if (t.meta.has( key )) {
 					fields = enumMetadata.dispatch( key, t, fields );
 				}
 				
 			case TInst(_.get() => t, _) if (!t.skip()):
+				underlying = t;
+				
 				for (key in classMetadata.keys()) if (t.meta.has( key )) {
 					fields = classMetadata.dispatch( key, t, fields );
 				}
@@ -258,7 +267,30 @@ using haxe.macro.MacroStringTools;
 				
 				
 			case _:
+				return fields;
+		}
+		//trace( underlying );
+		for (i in 0...fields.length) {
+			
+			var field = fields[i];
+			
+			// First check the field's metadata for matches. 
+			// Passing along the class and matched field.
+			for (key in fieldMetadata.keys()) if (field.meta != null && field.meta.exists( function(m) return m.name == key )) {
+				field = fieldMetadata.dispatch( key, underlying, field );
 				
+			}
+			
+			var printed = printer.printField( field );
+			//trace( printed );
+			// Now check the stringified field for matching inline metadata.
+			// Passing along the class and matched field.
+			for (key in inlineMetadata.keys()) if (key.match( printed )) {
+				field = inlineMetadata.dispatch( key, underlying, field );
+			}
+			
+			fields[i] = field;
+			
 		}
 		
 		/**
@@ -270,6 +302,7 @@ using haxe.macro.MacroStringTools;
 				
 			case TInst(_.get() => t, _) if (!t.skip()):
 				fields = anyClass.dispatch( t, fields );
+				fields = allMetadata.dispatch( t, fields );
 				
 			//case TAbstract(_.get() => t, _) if (!t.skip()):
 				
