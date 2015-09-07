@@ -195,7 +195,7 @@ using haxe.macro.MacroStringTools;
 		if (!Context.defined('display') && type != null && !history.exists( type.toString() )) {
 			var parts = type.toString().split('.');
 			var typePath = { name: parts.pop(), pack: parts };
-			history.set( type.toString(), { type:type, fields:fields, original:typePath, current:typePath } );
+			history.set( type.toString(), new TypeInfo( type, fields, typePath, typePath ) );
 			
 		}
 	}
@@ -242,7 +242,7 @@ using haxe.macro.MacroStringTools;
 		
 		populateHistory( type, fields );
 		processHistory();
-		trace( type );
+		
 		var underlying:Null<Dynamic> = null;
 		
 		/**
@@ -269,7 +269,7 @@ using haxe.macro.MacroStringTools;
 			case _:
 				return fields;
 		}
-		//trace( underlying );
+		
 		for (i in 0...fields.length) {
 			
 			var field = fields[i];
@@ -314,7 +314,7 @@ using haxe.macro.MacroStringTools;
 		return fields;
 	}
 	
-	private static inline function skip(type:BaseType):Bool {
+	private static function skip(type:BaseType):Bool {
 		return type.meta.has( ':KLAS_SKIP' );
 	}
 	
