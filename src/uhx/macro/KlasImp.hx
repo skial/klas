@@ -62,18 +62,6 @@ using haxe.macro.MacroStringTools;
 			printer = new Printer();
 			
 			if (!Context.defined('display') && !Context.defined('klas_rebuild')) {
-				rebuildDirectory = '${Sys.getCwd()}/'.normalize();
-				
-				// Create `Sys.getCwd()/klas/gen/` if it does not exist.
-				for (directory in ['klas', 'gen']) if (!(rebuildDirectory = '$rebuildDirectory/$directory/'.normalize()).exists()) {
-					rebuildDirectory.createDirectory();
-					
-				}
-				
-				// Remove any previous files from the `klas/gen` directory.
-				// Attempting to remove a directory throws an error.
-				for (file in recurse( rebuildDirectory )) file.deleteFile();
-				
 				// Setup to recompile with modified classes.
 				Context.onAfterGenerate( compileAgain );
 				
@@ -90,6 +78,7 @@ using haxe.macro.MacroStringTools;
 	/**
 	 * A callback which will be run on every class encountered.
 	 */
+	@:deprecated('Use KlasImp.anyClass')
 	public static var allMetadata:RVSignal<ClassType, Array<Field>>;
 	
 	public static var anyClass:RVSignal<ClassType, Array<Field>>;
@@ -111,13 +100,13 @@ using haxe.macro.MacroStringTools;
 	 * A callback which will be run only when the specified metadata
 	 * has been found on a abstract.
 	 */
-	public static var abstractMetadata:Signal<String, AbstractType, Array<Field>>;
+	//public static var abstractMetadata:Signal<String, AbstractType, Array<Field>>;
 	
 	/**
 	 * A callback which will be run only when the specified metadata
 	 * has been found on a typedef.
 	 */
-	public static var typedefMetadata:Signal<String, AnonType, Array<Field>>;
+	//public static var typedefMetadata:Signal<String, AnonType, Array<Field>>;
 	
 	/**
 	 * A callback which will be run only when the specified metadata
@@ -264,9 +253,6 @@ using haxe.macro.MacroStringTools;
 					fields = classMetadata.dispatch( key, t, fields );
 				}
 				
-			//case TAbstract(_.get() => t, _) if (!t.skip()):
-				
-				
 			case _:
 				
 		}
@@ -306,9 +292,6 @@ using haxe.macro.MacroStringTools;
 			case TInst(_.get() => t, _) if (!t.skip()):
 				fields = anyClass.dispatch( t, fields );
 				fields = allMetadata.dispatch( t, fields );
-				
-			//case TAbstract(_.get() => t, _) if (!t.skip() && t.meta.get().length > 0):
-				
 				
 			case _:
 				
@@ -467,7 +450,19 @@ using haxe.macro.MacroStringTools;
 	 * directory which overrides the user's classes.
 	 */
 	private static function compileAgain():Void {
-		if (!Context.defined('display') && !Context.defined('klas_rebuild') && postProcess) {
+		if (postProcess && !Context.defined('display') && !Context.defined('klas_rebuild')) {
+			rebuildDirectory = '${Sys.getCwd()}/'.normalize();
+			
+			// Create `Sys.getCwd()/klas/gen/` if it does not exist.
+			for (directory in ['klas', 'gen']) if (!(rebuildDirectory = '$rebuildDirectory/$directory/'.normalize()).exists()) {
+				rebuildDirectory.createDirectory();
+				
+			}
+			
+			// Remove any previous files from the `klas/gen` directory.
+			// Attempting to remove a directory throws an error.
+			for (file in recurse( rebuildDirectory )) file.deleteFile();
+			
 			Sys.println('----- Rerunning Haxe with your rebuilt types -----');
 			var process = new Process('haxe', Sys.args().concat( ['-cp', rebuildDirectory, '-D', 'klas_rebuild'] ) );
 			process.exitCode();
