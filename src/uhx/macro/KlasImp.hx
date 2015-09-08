@@ -331,7 +331,7 @@ using haxe.macro.MacroStringTools;
 					// Remove any KlasImp applied metadata.
 					for (meta in td.meta) if (meta.name == ':build') {
 						switch (meta.params[0]) {
-							case macro uhx.macro.KlasImp.inspection():
+							case macro uhx.macro.KlasImp.handler():
 								td.meta.remove( meta );
 								
 							case _:
