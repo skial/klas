@@ -59,6 +59,7 @@ using haxe.macro.MacroStringTools;
 			pendingInfo = new StringMap();
 			
 			onRebuild = new Signal1();
+			printer = new Printer();
 			
 			if (!Context.defined('display') && !Context.defined('klas_rebuild')) {
 				rebuildDirectory = '${Sys.getCwd()}/'.normalize();
@@ -164,7 +165,7 @@ using haxe.macro.MacroStringTools;
 	/**
 	 * Used to turn `Expr` and `TypeDefinition` into readable Haxe code.
 	 */
-	private static var printer:Printer = new Printer();
+	public static var printer:Printer;
 	
 	/**
 	 * Holds a list of types and their fields internally if global build has 
@@ -249,14 +250,14 @@ using haxe.macro.MacroStringTools;
 		 * Process matchting metadata signals.
 		 */
 		switch (type) {
-			case TEnum(_.get() => t, _) if (!t.skip()):
+			case TEnum(_.get() => t, _) if (enumMetadata.numListeners > 0 && !t.skip()):
 				underlying = t;
 				
 				for (key in enumMetadata.keys()) if (t.meta.has( key )) {
 					fields = enumMetadata.dispatch( key, t, fields );
 				}
 				
-			case TInst(_.get() => t, _) if (!t.skip()):
+			case TInst(_.get() => t, _) if (classMetadata.numListeners > 0 && !t.skip()):
 				underlying = t;
 				
 				for (key in classMetadata.keys()) if (t.meta.has( key )) {
@@ -267,10 +268,10 @@ using haxe.macro.MacroStringTools;
 				
 				
 			case _:
-				return fields;
+				
 		}
 		
-		for (i in 0...fields.length) {
+		if (fieldMetadata.numListeners > 0 ) for (i in 0...fields.length) {
 			
 			var field = fields[i];
 			
@@ -281,12 +282,14 @@ using haxe.macro.MacroStringTools;
 				
 			}
 			
-			var printed = printer.printField( field );
-			//trace( printed );
-			// Now check the stringified field for matching inline metadata.
-			// Passing along the class and matched field.
-			for (key in inlineMetadata.keys()) if (key.match( printed )) {
-				field = inlineMetadata.dispatch( key, underlying, field );
+			if (inlineMetadata.numListeners > 0) {
+				var printed = printer.printField( field );
+				//trace( printed );
+				// Now check the stringified field for matching inline metadata.
+				// Passing along the class and matched field.
+				for (key in inlineMetadata.keys()) if (key.match( printed )) {
+					field = inlineMetadata.dispatch( key, underlying, field );
+				}
 			}
 			
 			fields[i] = field;
@@ -304,7 +307,7 @@ using haxe.macro.MacroStringTools;
 				fields = anyClass.dispatch( t, fields );
 				fields = allMetadata.dispatch( t, fields );
 				
-			//case TAbstract(_.get() => t, _) if (!t.skip()):
+			//case TAbstract(_.get() => t, _) if (!t.skip() && t.meta.get().length > 0):
 				
 				
 			case _:
@@ -316,79 +319,6 @@ using haxe.macro.MacroStringTools;
 	
 	private static function skip(type:BaseType):Bool {
 		return type.meta.has( ':KLAS_SKIP' );
-	}
-	
-	/**
-	 * The main build method which passes Classes and their fields
-	 * to other build macros.
-	 */
-	@:noCompletion 
-	@:access(haxe.macro.TypeTools)
-	public static function build(?isGlobal:Bool = false):Array<Field> {
-		var type = Context.getLocalType();
-		var fields = Context.getBuildFields();
-		
-		if (Context.getLocalClass() == null) return fields;
-		
-		var cls = Context.getLocalClass().get();
-		
-		// This detects classes which have `implements Klas` and `@:build(uhx.macro.KlasImp.build(true))`.
-		for (face in cls.interfaces) if (face.t.toString() == 'Klas' && isGlobal) return fields;
-		
-		initialize();
-		
-		populateHistory( type, fields );
-		processHistory();
-		
-		log( cls.pack.toDotPath( cls.name ) + ' :: ' + [for (meta in cls.meta.get()) meta.name ] );
-		
-		if (cls.meta.has(':KLAS_SKIP')) return fields;
-		
-		/**
-		 * Loop through any class metadata and pass along 
-		 * the class and its fields to the matching handler.
-		 * -----
-		 * Each handler should decide if its needed to be run
-		 * while in IDE display mode, `-D display`.
-		 */
-		
-		log( 'CLASS_META :: ' + [for (key in classMetadata.keys()) key] );
-		
-		for (key in classMetadata.keys()) if (cls.meta.has( key )) {
-			fields = classMetadata.dispatch( key, cls, fields );
-			
-		}
-		
-		log( 'FIELD_META :: ' + [for (key in fieldMetadata.keys()) key] );
-		
-		for (i in 0...fields.length) {
-			
-			var field = fields[i];
-			
-			// First check the field's metadata for matches. 
-			// Passing along the class and matched field.
-			for (key in fieldMetadata.keys()) if (field.meta != null && field.meta.exists( function(m) return m.name == key )) {
-				field = fieldMetadata.dispatch( key, cls, field );
-				
-			}
-			
-			var printed = printer.printField( field );
-			//trace( printed );
-			// Now check the stringified field for matching inline metadata.
-			// Passing along the class and matched field.
-			for (key in inlineMetadata.keys()) if (key.match( printed )) {
-				field = inlineMetadata.dispatch( key, cls, field );
-			}
-			
-			fields[i] = field;
-			
-		}
-		
-		fields = allMetadata.dispatch(cls, fields);
-		
-		log( 'REBUILD :: ' + [for (key in rebuild.keys()) key] );
-		
-		return fields;
 	}
 	
 	/**
