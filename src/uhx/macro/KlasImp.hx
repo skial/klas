@@ -62,6 +62,18 @@ using haxe.macro.MacroStringTools;
 			printer = new Printer();
 			
 			if (!Context.defined('display') && !Context.defined('klas_rebuild')) {
+				rebuildDirectory = '${Sys.getCwd()}/'.normalize();
+				
+				// Create `Sys.getCwd()/klas/gen/` if it does not exist.
+				for (directory in ['klas', 'gen']) if (!(rebuildDirectory = '$rebuildDirectory/$directory/'.normalize()).exists()) {
+					rebuildDirectory.createDirectory();
+					
+				}
+				
+				// Remove any previous files from the `klas/gen` directory.
+				// Attempting to remove a directory throws an error.
+				for (file in recurse( rebuildDirectory )) file.deleteFile();
+				
 				// Setup to recompile with modified classes.
 				Context.onAfterGenerate( compileAgain );
 				
@@ -435,18 +447,6 @@ using haxe.macro.MacroStringTools;
 	 */
 	private static function compileAgain():Void {
 		if (postProcess && !Context.defined('display') && !Context.defined('klas_rebuild')) {
-			rebuildDirectory = '${Sys.getCwd()}/'.normalize();
-			
-			// Create `Sys.getCwd()/klas/gen/` if it does not exist.
-			for (directory in ['klas', 'gen']) if (!(rebuildDirectory = '$rebuildDirectory/$directory/'.normalize()).exists()) {
-				rebuildDirectory.createDirectory();
-				
-			}
-			
-			// Remove any previous files from the `klas/gen` directory.
-			// Attempting to remove a directory throws an error.
-			for (file in recurse( rebuildDirectory )) file.deleteFile();
-			
 			Sys.println('----- Rerunning Haxe with your rebuilt types -----');
 			var process = new Process('haxe', Sys.args().concat( ['-cp', rebuildDirectory, '-D', 'klas_rebuild'] ) );
 			process.exitCode();
