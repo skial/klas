@@ -162,60 +162,6 @@ using haxe.macro.MacroStringTools;
 	 */
 	private static var history:StringMap<TypeInfo>;
 	
-	/**
-	 * Called by KlasImp's `extraParams.hxml` file for globally applied
-	 * metadata.
-	 */
-	@:noCompletion
-	public static function inspection():Array<Field> {
-		initialize();
-		
-		if (!Context.defined('display')) {
-			populateHistory( Context.getLocalType(), Context.getBuildFields() );
-			processHistory();
-		}
-		
-		return Context.getBuildFields();
-	}
-	
-	/**
-	 * Collect information on the current type.
-	 */
-	private static function populateHistory(type:Type, fields:Array<Field>):Void {
-		if (!Context.defined('display') && type != null && !history.exists( type.toString() )) {
-			var parts = type.toString().split('.');
-			var typePath = { name: parts.pop(), pack: parts };
-			history.set( type.toString(), new TypeInfo( type, fields, typePath, typePath ) );
-			
-		}
-	}
-	
-	/**
-	 * Processes any methods interested in a specific `Type`.
-	 */
-	private static function processHistory():Void {
-		var _history = null;
-		
-		if (!Context.defined('display')) for (key in info.keys()) if (history.exists( key )) {
-			_history = history.get( key );
-			
-			// Process any pending calls.
-			if (pendingInfo.exists( key )) {
-				for (cb in pendingInfo.get( key )) {
-					cb( _history.type, _history.fields );
-				}
-				
-				pendingInfo.remove( key );
-				
-			}
-			
-			for (cb in info.get( key )) cb( _history.type, _history.fields );
-			
-			// All callbacks have been called, clear from the map.
-			info.remove( key );
-		}
-	}
-	
 	@:noCompletion
 	public static function handler(?isGlobal:Bool = false):Array<Field> {
 		var type = Context.getLocalType();
@@ -302,6 +248,44 @@ using haxe.macro.MacroStringTools;
 	
 	private static function skip(type:BaseType):Bool {
 		return type.meta.has( ':KLAS_SKIP' );
+	}
+	
+	/**
+	 * Collect information on the current type.
+	 */
+	private static function populateHistory(type:Type, fields:Array<Field>):Void {
+		if (!Context.defined('display') && type != null && !history.exists( type.toString() )) {
+			var parts = type.toString().split('.');
+			var typePath = { name: parts.pop(), pack: parts };
+			history.set( type.toString(), new TypeInfo( type, fields, typePath, typePath ) );
+			
+		}
+	}
+	
+	/**
+	 * Processes any methods interested in a specific `Type`.
+	 */
+	private static function processHistory():Void {
+		var _history = null;
+		
+		if (!Context.defined('display')) for (key in info.keys()) if (history.exists( key )) {
+			_history = history.get( key );
+			
+			// Process any pending calls.
+			if (pendingInfo.exists( key )) {
+				for (cb in pendingInfo.get( key )) {
+					cb( _history.type, _history.fields );
+				}
+				
+				pendingInfo.remove( key );
+				
+			}
+			
+			for (cb in info.get( key )) cb( _history.type, _history.fields );
+			
+			// All callbacks have been called, clear from the map.
+			info.remove( key );
+		}
 	}
 	
 	/**
