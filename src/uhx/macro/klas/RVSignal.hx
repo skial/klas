@@ -23,8 +23,8 @@ class RVSignal<T1, T2> extends Signal<RVSlot<T1, T2>, T1->T2->T2> {
 		
 		return value2;
 	}
-
-	override function createSlot(listener:T1->T2->T2, once:Bool = false, priority:Int = 0) {
+	
+	override function createSlot(listener:T1->T2->T2, once:Null<Bool> = false, priority:Null<Int> = 0) {
 		return new RVSlot<T1, T2>(this, listener, once, priority);
 	}
 }
