@@ -24,6 +24,7 @@ using StringTools;
 using sys.io.File;
 using haxe.io.Path;
 using sys.FileSystem;
+using uhx.macro.KlasImp;
 using haxe.macro.TypeTools;
 using haxe.macro.ComplexTypeTools;
 using haxe.macro.MacroStringTools;
@@ -45,8 +46,11 @@ using haxe.macro.MacroStringTools;
 			// Initialize public hooks.
 			info = new StringMap();
 			rebuild = new StringMap();
+			anyEnum = new RVSignal();
+			anyClass = new RVSignal();
 			inlineMetadata = new Map();
 			allMetadata = new RVSignal();
+			enumMetadata = new StringMap();
 			classMetadata = new StringMap();
 			fieldMetadata = new StringMap();
 			
@@ -55,6 +59,7 @@ using haxe.macro.MacroStringTools;
 			pendingInfo = new StringMap();
 			
 			onRebuild = new Signal1();
+			printer = new Printer();
 			
 			if (!Context.defined('display') && !Context.defined('klas_rebuild')) {
 				rebuildDirectory = '${Sys.getCwd()}/'.normalize();
@@ -85,13 +90,35 @@ using haxe.macro.MacroStringTools;
 	/**
 	 * A callback which will be run on every class encountered.
 	 */
+	@:deprecated('Use KlasImp.anyClass')
 	public static var allMetadata:RVSignal<ClassType, Array<Field>>;
+	
+	public static var anyClass:RVSignal<ClassType, Array<Field>>;
+	public static var anyEnum:RVSignal<EnumType, Array<Field>>;
 	
 	/**
 	 * A callback which will be run only when the specified metadata
 	 * has been found on a class.
 	 */
 	public static var classMetadata:Signal<String, ClassType, Array<Field>>;
+	
+	/**
+	 * A callback which will be run only when the specified metadata
+	 * has been found on a enum.
+	 */
+	public static var enumMetadata:Signal<String, EnumType, Array<Field>>;
+	
+	/**
+	 * A callback which will be run only when the specified metadata
+	 * has been found on a abstract.
+	 */
+	//public static var abstractMetadata:Signal<String, AbstractType, Array<Field>>;
+	
+	/**
+	 * A callback which will be run only when the specified metadata
+	 * has been found on a typedef.
+	 */
+	//public static var typedefMetadata:Signal<String, AnonType, Array<Field>>;
 	
 	/**
 	 * A callback which will be run only when the specified metadata
@@ -139,7 +166,7 @@ using haxe.macro.MacroStringTools;
 	/**
 	 * Used to turn `Expr` and `TypeDefinition` into readable Haxe code.
 	 */
-	private static var printer:Printer = new Printer();
+	public static var printer:Printer;
 	
 	/**
 	 * Holds a list of types and their fields internally if global build has 
@@ -147,20 +174,92 @@ using haxe.macro.MacroStringTools;
 	 */
 	private static var history:StringMap<TypeInfo>;
 	
-	/**
-	 * Called by KlasImp's `extraParams.hxml` file for globally applied
-	 * metadata.
-	 */
 	@:noCompletion
-	public static function inspection():Array<Field> {
+	public static function handler(?isGlobal:Bool = false):Array<Field> {
+		var type = Context.getLocalType();
+		var fields = Context.getBuildFields();
+		
+		// The following breaks afew classes... TODO FIX
+		//var moduleTypes = try Context.getModule( type.toString() ) catch (e:Dynamic) [];
+		
+		return type == null ? fields : process( type, fields );
+	}
+	
+	private static function process(type:Type, fields:Array<Field>):Array<Field> {
 		initialize();
 		
-		if (!Context.defined('display')) {
-			populateHistory( Context.getLocalType(), Context.getBuildFields() );
-			processHistory();
+		populateHistory( type, fields );
+		processHistory();
+		
+		var underlying:Null<Dynamic> = null;
+		
+		/**
+		 * Process matchting metadata signals.
+		 */
+		switch (type) {
+			case TEnum(_.get() => t, _) if (enumMetadata.numListeners > 0 && !t.skip()):
+				underlying = t;
+				
+				for (key in enumMetadata.keys()) if (t.meta.has( key )) {
+					fields = enumMetadata.dispatch( key, t, fields );
+				}
+				
+			case TInst(_.get() => t, _) if (classMetadata.numListeners > 0 && !t.skip()):
+				underlying = t;
+				
+				for (key in classMetadata.keys()) if (t.meta.has( key )) {
+					fields = classMetadata.dispatch( key, t, fields );
+				}
+				
+			case _:
+				
 		}
 		
-		return Context.getBuildFields();
+		if (fieldMetadata.numListeners > 0 ) for (i in 0...fields.length) {
+			
+			var field = fields[i];
+			
+			// First check the field's metadata for matches. 
+			// Passing along the class and matched field.
+			for (key in fieldMetadata.keys()) if (field.meta != null && field.meta.exists( function(m) return m.name == key )) {
+				field = fieldMetadata.dispatch( key, underlying, field );
+				
+			}
+			
+			if (inlineMetadata.numListeners > 0) {
+				var printed = printer.printField( field );
+				//trace( printed );
+				// Now check the stringified field for matching inline metadata.
+				// Passing along the class and matched field.
+				for (key in inlineMetadata.keys()) if (key.match( printed )) {
+					field = inlineMetadata.dispatch( key, underlying, field );
+				}
+			}
+			
+			fields[i] = field;
+			
+		}
+		
+		/**
+		 * Process the `any*` signals last.
+		 */
+		switch (type) {
+			case TEnum(_.get() => t, _) if (!t.skip()):
+				fields = anyEnum.dispatch( t, fields );
+				
+			case TInst(_.get() => t, _) if (!t.skip()):
+				fields = anyClass.dispatch( t, fields );
+				fields = allMetadata.dispatch( t, fields );
+				
+			case _:
+				
+		}
+		
+		return fields;
+	}
+	
+	private static function skip(type:BaseType):Bool {
+		return type.meta.has( ':KLAS_SKIP' );
 	}
 	
 	/**
@@ -170,7 +269,7 @@ using haxe.macro.MacroStringTools;
 		if (!Context.defined('display') && type != null && !history.exists( type.toString() )) {
 			var parts = type.toString().split('.');
 			var typePath = { name: parts.pop(), pack: parts };
-			history.set( type.toString(), { type:type, fields:fields, original:typePath, current:typePath } );
+			history.set( type.toString(), new TypeInfo( type, fields, typePath, typePath ) );
 			
 		}
 	}
@@ -199,79 +298,6 @@ using haxe.macro.MacroStringTools;
 			// All callbacks have been called, clear from the map.
 			info.remove( key );
 		}
-	}
-	
-	/**
-	 * The main build method which passes Classes and their fields
-	 * to other build macros.
-	 */
-	@:noCompletion 
-	@:access(haxe.macro.TypeTools)
-	public static function build(?isGlobal:Bool = false):Array<Field> {
-		var type = Context.getLocalType();
-		var fields = Context.getBuildFields();
-		
-		if (Context.getLocalClass() == null) return fields;
-		
-		var cls = Context.getLocalClass().get();
-		
-		// This detects classes which have `implements Klas` and `@:build(uhx.macro.KlasImp.build(true))`.
-		for (face in cls.interfaces) if (face.t.toString() == 'Klas' && isGlobal) return fields;
-		
-		initialize();
-		
-		populateHistory( type, fields );
-		processHistory();
-		
-		log( cls.pack.toDotPath( cls.name ) + ' :: ' + [for (meta in cls.meta.get()) meta.name ] );
-		
-		if (cls.meta.has(':KLAS_SKIP')) return fields;
-		
-		/**
-		 * Loop through any class metadata and pass along 
-		 * the class and its fields to the matching handler.
-		 * -----
-		 * Each handler should decide if its needed to be run
-		 * while in IDE display mode, `-D display`.
-		 */
-		
-		log( 'CLASS_META :: ' + [for (key in classMetadata.keys()) key] );
-		
-		for (key in classMetadata.keys()) if (cls.meta.has( key )) {
-			fields = classMetadata.dispatch( key, cls, fields );
-			
-		}
-		
-		log( 'FIELD_META :: ' + [for (key in fieldMetadata.keys()) key] );
-		
-		for (i in 0...fields.length) {
-			
-			var field = fields[i];
-			
-			// First check the field's metadata for matches. 
-			// Passing along the class and matched field.
-			for (key in fieldMetadata.keys()) if (field.meta != null && field.meta.exists( function(m) return m.name == key )) {
-				field = fieldMetadata.dispatch( key, cls, field );
-				
-			}
-			
-			var printed = printer.printField( field );
-			//trace( printed );
-			// Now check the stringified field for matching inline metadata.
-			// Passing along the class and matched field.
-			for (key in inlineMetadata.keys()) if (key.match( printed )) {
-				field = inlineMetadata.dispatch( key, cls, field );
-			}
-			
-			fields[i] = field;
-			
-		}
-		
-		fields = allMetadata.dispatch(cls, fields);
-		
-		log( 'REBUILD :: ' + [for (key in rebuild.keys()) key] );
-		
-		return fields;
 	}
 	
 	/**
@@ -305,7 +331,7 @@ using haxe.macro.MacroStringTools;
 					// Remove any KlasImp applied metadata.
 					for (meta in td.meta) if (meta.name == ':build') {
 						switch (meta.params[0]) {
-							case macro uhx.macro.KlasImp.inspection():
+							case macro uhx.macro.KlasImp.handler():
 								td.meta.remove( meta );
 								
 							case _:
@@ -420,7 +446,7 @@ using haxe.macro.MacroStringTools;
 	 * directory which overrides the user's classes.
 	 */
 	private static function compileAgain():Void {
-		if (!Context.defined('display') && !Context.defined('klas_rebuild') && postProcess) {
+		if (postProcess && !Context.defined('display') && !Context.defined('klas_rebuild')) {
 			Sys.println('----- Rerunning Haxe with your rebuilt types -----');
 			var process = new Process('haxe', Sys.args().concat( ['-cp', rebuildDirectory, '-D', 'klas_rebuild'] ) );
 			process.exitCode();
